@@ -14,7 +14,13 @@ export type ImageContent = {
     };
 };
 
-export type Content = TextContent | ImageContent;
+export type ThinkingContent = {
+    type: "thinking";
+    thinking: string;
+    signature?: string;
+};
+
+export type Content = TextContent | ImageContent | ThinkingContent;
 
 export type Message = {
     role: Role;
@@ -32,7 +38,7 @@ export type Tool = {
     input_schema: object;
 };
 
-export type ToolChoice = "auto" | "any" | {type: "tool"; name: string};
+export type ToolChoice = "auto" | "any" | { type: "tool"; name: string };
 
 export type ToolUse = {
     type: "tool_use";
@@ -48,10 +54,10 @@ export type ToolResult = {
     is_error?: boolean;
 };
 
-export type MessageContent = TextContent | ImageContent | ToolUse | ToolResult;
+export type MessageContent = TextContent | ImageContent | ToolUse | ToolResult | ThinkingContent;
 
 // For messages in the request
-export type RequestContent = TextContent | ImageContent;
+export type RequestContent = TextContent | ImageContent | ToolUse | ToolResult | ThinkingContent;
 
 export type MessagesRequest = {
     model: string;
@@ -65,6 +71,10 @@ export type MessagesRequest = {
     stream?: boolean;
     tools?: Tool[];
     tool_choice?: ToolChoice;
+    thinking?: {
+        type: "enabled";
+        budget_tokens: number;
+    };
 };
 
 export type Usage = {
@@ -89,7 +99,7 @@ export type StreamEvent = {
 
 export type MessageStartEvent = StreamEvent & {
     type: "message_start";
-    message: Omit<MessagesResponse, "content"> & {content: []};
+    message: Omit<MessagesResponse, "content"> & { content: [] };
 };
 
 export type ContentBlockStartEvent = StreamEvent & {
@@ -102,8 +112,9 @@ export type ContentBlockDeltaEvent = StreamEvent & {
     type: "content_block_delta";
     index: number;
     delta: {
-        type: "text_delta" | "input_json_delta";
+        type: "text_delta" | "input_json_delta" | "thinking_delta";
         text?: string;
+        thinking?: string;
         partial_json?: string;
     };
 };

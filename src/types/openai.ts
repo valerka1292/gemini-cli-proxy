@@ -30,7 +30,7 @@ export type FunctionDeclaration = {
     parameters: object;
 };
 
-export type ToolChoice = "none" | "auto" | {type: "function"; function: {name: string}};
+export type ToolChoice = "none" | "auto" | { type: "function"; function: { name: string } };
 
 export type ToolCall = {
     index: number;

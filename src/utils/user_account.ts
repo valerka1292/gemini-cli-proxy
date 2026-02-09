@@ -5,6 +5,7 @@
  */
 
 import {promises as fsp, existsSync, readFileSync} from "node:fs";
+import * as path from "node:path";
 import {getGoogleAccountsCachePath} from "./paths.js";
 
 interface UserAccounts {
@@ -41,7 +42,7 @@ async function readAccounts(filePath: string): Promise<UserAccounts> {
  */
 export async function cacheGoogleAccount(email: string): Promise<void> {
     const filePath = getGoogleAccountsCachePath();
-    await fsp.mkdir(filePath.substring(0, filePath.lastIndexOf("/")), {recursive: true});
+    await fsp.mkdir(path.dirname(filePath), {recursive: true});
 
     const accounts = await readAccounts(filePath);
 

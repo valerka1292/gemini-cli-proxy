@@ -16,9 +16,9 @@ Gemini CodeAssist does not provide direct access to Gemini models which limits y
  
 ```npx gemini-cli-proxy``` 
 
-The server will start on `http://localhost:3000`
-* OpenAI compatible endpoint: `http://localhost:3000/openai`
-* Anthropic compatible endpoint: `http://localhost:3000/anthropic`
+The server will start on `http://localhost:3456`
+* OpenAI compatible endpoint: `http://localhost:3456/openai`
+* Anthropic compatible endpoint: `http://localhost:3456/anthropic`
 
 ### Usage
 
@@ -27,7 +27,7 @@ npx gemini-cli-proxy [options]
 ```
 
 Options:
-- `-p, --port <port>` - Server port (default: 3000) 
+- `-p, --port <port>` - Server port (default: 3456) 
 - `-g, --google-cloud-project <project>` - Google Cloud project ID if you have paid/enterprise tier (default: GOOGLE_CLOUD_PROJECT env variable)
 - `--disable-browser-auth` - Disables browser auth flow and uses code based auth (default: false)
 - `--disable-google-search` - Disables native Google Search tool (default: false)
@@ -42,9 +42,9 @@ If you have NOT used Gemini CLI before, you will be prompted to log in to Gemini
 Most agentic tools rely on environment variables, you can export the following variables
 
 ```
-export OPENAI_API_BASE=http://localhost:3000/openai
+export OPENAI_API_BASE=http://localhost:3456/openai
 export OPENAI_API_KEY=ItDoesNotMatter
-export ANTHROPIC_BASE_URL="http://localhost:3000/anthropic"
+export ANTHROPIC_BASE_URL="http://localhost:3456/anthropic"
 export ANTHROPIC_AUTH_TOKEN=ItDoesNotMatter
 ```
 
@@ -58,7 +58,7 @@ Add the following env fields to `.claude/settings.json` file
     ...
   },
   "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:3000/anthropic",
+    "ANTHROPIC_BASE_URL": "http://localhost:3456/anthropic",
     "ANTHROPIC_AUTH_TOKEN": "NotImportant",
     "ANTHROPIC_MODEL": "gemini-2.5-pro"
   }
@@ -72,7 +72,7 @@ Add the following to the Zed config file
 {
   "language_models": {
     "openai": {
-      "api_url": "http://localhost:3000/openai",
+      "api_url": "http://localhost:3456/openai",
       "available_models": [
         {
           "name": "gemini-2.5",

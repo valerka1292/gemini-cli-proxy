@@ -1,9 +1,11 @@
-import {OAuth2Client} from "google-auth-library";
+import { OAuth2Client } from "google-auth-library";
+import * as readline from "node:readline";
+import * as fs from "node:fs";
 import * as OpenAI from "../types/openai.js";
 import * as Gemini from "../types/gemini.js";
-import {CODE_ASSIST_API_VERSION, CODE_ASSIST_ENDPOINT, OPENAI_CHAT_COMPLETION_OBJECT} from "../utils/constant.js";
-import {AutoModelSwitchingHelper, type RetryableRequestData} from "./auto-model-switching.js";
-import {getLogger, Logger} from "../utils/logger.js";
+import { CODE_ASSIST_API_VERSION, CODE_ASSIST_ENDPOINT, CODE_ASSIST_ENDPOINT_FALLBACKS, OPENAI_CHAT_COMPLETION_OBJECT, MAX_RETRIES } from "../utils/constant.js";
+import { AutoModelSwitchingHelper, type RetryableRequestData } from "./auto-model-switching.js";
+import { getLogger, Logger } from "../utils/logger.js";
 import chalk from "chalk";
 
 /**
@@ -54,11 +56,23 @@ export class GeminiApiClient {
             return this.projectId;
         }
 
+        // Check environment variables first (like gemini-cli)
+        const envProject = process.env['GOOGLE_CLOUD_PROJECT'] || process.env['GOOGLE_CLOUD_PROJECT_ID'];
+        if (envProject) {
+            this.projectId = envProject;
+            return envProject;
+        }
+
         try {
-            const initialProjectId = "default-project";
+            // gemini-cli sends undefined (omitted key) instead of "default-project"
             const loadResponse = (await this.callEndpoint("loadCodeAssist", {
-                cloudaicompanionProject: initialProjectId,
-                metadata: {duetProject: initialProjectId},
+                cloudaicompanionProject: undefined,
+                metadata: {
+                    ideType: 'IDE_UNSPECIFIED',
+                    platform: 'PLATFORM_UNSPECIFIED',
+                    pluginType: 'GEMINI',
+                    duetProject: undefined
+                },
             })) as Gemini.ProjectDiscoveryResponse;
 
             if (loadResponse.cloudaicompanionProject) {
@@ -66,15 +80,23 @@ export class GeminiApiClient {
                 return loadResponse.cloudaicompanionProject;
             }
 
+            // If no project returned, we might need onboarding or it's a new user
             const defaultTier = loadResponse.allowedTiers?.find((tier) => tier.isDefault);
             const tierId = defaultTier?.id ?? "free-tier";
+
+            // If free tier, gemini-cli sends undefined for project during onboarding
             const onboardRequest = {
                 tierId,
-                cloudaicompanionProject: initialProjectId,
+                cloudaicompanionProject: undefined,
+                metadata: {
+                    ideType: 'IDE_UNSPECIFIED',
+                    platform: 'PLATFORM_UNSPECIFIED',
+                    pluginType: 'GEMINI'
+                }
             };
 
             // Poll until operation is complete with timeout protection
-            const MAX_RETRIES = 30 ;
+            const MAX_RETRIES = 30;
             let retryCount = 0;
             let lroResponse: Gemini.OnboardUserResponse | undefined;
             while (retryCount < MAX_RETRIES) {
@@ -90,7 +112,13 @@ export class GeminiApiClient {
                 throw new Error("common:errors.geminiCli.onboardingTimeout");
             }
 
-            this.projectId = lroResponse.response?.cloudaicompanionProject?.id ?? initialProjectId;
+            // Use the returned project ID
+            this.projectId = lroResponse.response?.cloudaicompanionProject?.id ?? null;
+
+            if (!this.projectId) {
+                throw new Error("Could not automatically discover a valid Google Cloud Project ID.");
+            }
+
             return this.projectId;
         } catch (error: unknown) {
             this.logger.error("Failed to discover project ID", error);
@@ -99,7 +127,7 @@ export class GeminiApiClient {
     }
 
     private async callEndpoint(method: string, body: Record<string, unknown>): Promise<unknown> {
-        const {token} = await this.authClient.getAccessToken();
+        const { token } = await this.authClient.getAccessToken();
         const response = await fetch(`${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:${method}`,
             {
                 method: "POST",
@@ -138,6 +166,7 @@ export class GeminiApiClient {
         };
         _autoSwitchNotification?: string;
     }> {
+        this.logger.debug(`Getting completion for model: ${geminiCompletionRequest.model}`);
         try {
             const chunks: OpenAI.StreamChunk[] = [];
             for await (const chunk of this.streamContent(geminiCompletionRequest, isRetry)) {
@@ -146,7 +175,7 @@ export class GeminiApiClient {
 
             let content = "";
             const tool_calls: OpenAI.ToolCall[] = [];
-            let usage: {inputTokens: number; outputTokens: number} | undefined;
+            let usage: { inputTokens: number; outputTokens: number } | undefined;
 
             for (const chunk of chunks) {
                 if (chunk.choices[0].delta.content) {
@@ -163,6 +192,7 @@ export class GeminiApiClient {
                 }
             }
 
+            this.logger.debug(`Completion finished. Content length: ${content.length}, Tool calls: ${tool_calls.length}, Usage: ${JSON.stringify(usage)}`);
 
             return {
                 content,
@@ -170,18 +200,18 @@ export class GeminiApiClient {
                 usage,
             };
         } catch (error) {
-            if (error instanceof GeminiApiError && 
+            if (error instanceof GeminiApiError &&
                 !this.disableAutoModelSwitch &&
                 this.autoSwitcher.isRateLimitError(error.statusCode) &&
                 this.autoSwitcher.shouldAttemptFallback(geminiCompletionRequest.model)) {
-                
+
                 // Attempt fallback using auto-switching helper
                 return await this.autoSwitcher.handleNonStreamingFallback(
                     geminiCompletionRequest.model,
                     error.statusCode,
                     geminiCompletionRequest,
                     async (model: string, data: RetryableRequestData) => {
-                        const updatedRequest = {...data, model} as Gemini.ChatCompletionRequest;
+                        const updatedRequest = { ...data, model } as Gemini.ChatCompletionRequest;
                         return await this.getCompletion(updatedRequest, isRetry);
                     }
                 ) as Promise<{
@@ -208,11 +238,11 @@ export class GeminiApiClient {
         try {
             yield* this.streamContentInternal(geminiCompletionRequest, isRetry);
         } catch (error) {
-            if (error instanceof GeminiApiError && 
+            if (error instanceof GeminiApiError &&
                 !this.disableAutoModelSwitch &&
                 this.autoSwitcher.isRateLimitError(error.statusCode) &&
                 this.autoSwitcher.shouldAttemptFallback(geminiCompletionRequest.model)) {
-                
+
                 // eslint-disable-next-line @typescript-eslint/no-this-alias
                 const self = this;
                 yield* this.autoSwitcher.handleStreamingFallback(
@@ -220,7 +250,7 @@ export class GeminiApiClient {
                     error.statusCode,
                     geminiCompletionRequest,
                     async function* (model: string, data: RetryableRequestData) {
-                        const updatedRequest = {...data, model} as Gemini.ChatCompletionRequest;
+                        const updatedRequest = { ...data, model } as Gemini.ChatCompletionRequest;
                         // Create new client instance to reset firstChunk state
                         const fallbackClient = new GeminiApiClient(
                             self.authClient,
@@ -244,136 +274,390 @@ export class GeminiApiClient {
         geminiCompletionRequest: Gemini.ChatCompletionRequest,
         isRetry: boolean = false,
     ): AsyncGenerator<OpenAI.StreamChunk> {
-        const {token} = await this.authClient.getAccessToken();
-        const response = await fetch(
-            `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:streamGenerateContent?alt=sse`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(geminiCompletionRequest),
-            },
-        );
+        this.logger.info("Starting stream request...");
 
-        if (!response.ok) {
-            if (response.status === 401 && !isRetry) {
+        // Match gemini-cli's CAGenerateContentRequest structure
+        // See: gemini-cli/packages/core/src/code_assist/converter.ts
+        const payload = {
+            ...geminiCompletionRequest,
+            user_prompt_id: crypto.randomUUID(),
+        };
+
+        // Inject session_id if missing (gemini-cli uses this.sessionId)
+        if (payload.request && !(payload.request as any).session_id) {
+            (payload.request as any).session_id = this.chatID;
+        }
+
+        try {
+            // Using authClient.request() exactly like gemini-cli's CodeAssistServer.requestStreamingPost
+            // See: gemini-cli/packages/core/src/code_assist/server.ts
+            const version = "0.25.0";
+            const userAgent = `GeminiCLI/${version}/${payload.model} (${process.platform}; ${process.arch})`;
+
+            const url = `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:streamGenerateContent`;
+            const installationId = "68260397-5066-4f72-b0d2-9f92585ddd1c";
+            const quotaProjectId = payload.project || this.googleCloudProject || "nifty-iridium-3vpmb";
+
+            // Debug logging to file
+            const logFile = "c:/Users/Administrator/Desktop/gemini-cli-proxy/debug.log";
+            fs.appendFileSync(logFile, `\n\n=== New request ${new Date().toISOString()} ===\n`);
+            fs.appendFileSync(logFile, `URL: ${url}\n`);
+            fs.appendFileSync(logFile, `Model: ${payload.model}\n`);
+            fs.appendFileSync(logFile, `Full Payload:\n${JSON.stringify(payload, null, 2)}\n`);
+
+            this.logger.info(`Making request to: ${url}`);
+
+            const headers: Record<string, string> = {
+                "Content-Type": "application/json",
+                "User-Agent": userAgent,
+                "x-gemini-api-privileged-user-id": installationId,
+            };
+
+            const res = await this.authClient.request({
+                url,
+                method: "POST",
+                params: {
+                    alt: "sse",
+                },
+                headers,
+                responseType: "stream",
+                body: JSON.stringify(payload),
+                validateStatus: (status) => (status >= 200 && status < 300) || status === 400,
+                retryConfig: {
+                    retry: 3,
+                    retryDelay: 1000,
+                    statusCodesToRetry: [[429, 429], [500, 599]],
+                    onRetryAttempt: (err) => {
+                        this.logger.warn(`Retrying request due to ${err.code || err.message}. Attempt ${err.config.retryConfig?.currentRetryAttempt}`);
+                    }
+                }
+            });
+
+            if (res.status === 400) {
+                const stream = res.data as NodeJS.ReadableStream;
+                let errorBody = "";
+                for await (const chunk of stream) {
+                    errorBody += chunk.toString();
+                }
+                const logPath = "c:/Users/Administrator/Desktop/gemini-cli-proxy/debug.log";
+                fs.appendFileSync(logPath, `\n\n=== API ERROR 400 BODY ===\n${errorBody}\n`);
+
+                let errorMessage = `API call failed with status 400: ${errorBody}`;
+                try {
+                    const parsed = JSON.parse(errorBody);
+                    if (parsed.error) {
+                        errorMessage = `API Error ${parsed.error.code} (${parsed.error.status}): ${parsed.error.message}`;
+                    }
+                } catch { /* ignore */ }
+
+                throw new GeminiApiError(errorMessage, 400, errorBody);
+            }
+
+            this.logger.info("Response received, starting SSE parsing...");
+
+            // Use readline exactly like gemini-cli does
+            const rl = readline.createInterface({
+                input: res.data as NodeJS.ReadableStream,
+                crlfDelay: Infinity, // Recognizes '\r\n' and '\n' as line breaks
+            });
+
+            let bufferedLines: string[] = [];
+            let toolCallId: string | undefined = undefined;
+            let usageData: OpenAI.UsageData | undefined;
+            let thinkingInProgress = false;
+
+            for await (const line of rl) {
+                if (line.startsWith("data: ")) {
+                    bufferedLines.push(line.slice(6).trim());
+                } else if (line === "") {
+                    if (bufferedLines.length === 0) {
+                        continue; // no data to yield
+                    }
+
+                    try {
+                        const jsonData = JSON.parse(bufferedLines.join("\n")) as Gemini.Response;
+                        bufferedLines = []; // Reset the buffer after parsing
+
+                        // Debug log raw Gemini response
+                        const candidate = jsonData.response?.candidates?.[0];
+                        if (candidate?.content?.parts) {
+                            for (const part of candidate.content.parts as any[]) {
+                                if (part.thought === true || part.thoughtSignature || part.thought_signature) {
+                                    fs.appendFileSync("c:/Users/Administrator/Desktop/gemini-cli-proxy/debug.log",
+                                        `\n=== GEMINI THOUGHT PART ===\n${JSON.stringify(part, null, 2)}\n`);
+                                }
+                            }
+                        }
+
+                        if (candidate?.content?.parts) {
+                            for (const part of candidate.content.parts as Gemini.Part[]) {
+                                if ("text" in part) {
+                                    // Handle text content
+                                    // Check for thinking content
+                                    const isThinking = (part as any).thought === true;
+
+                                    if (isThinking) {
+                                        // Handle thinking content from Gemini - pass through native format
+                                        const thinkingText = part.text;
+                                        const signature = (part as any).thought_signature || (part as any).thoughtSignature || "";
+                                        if (signature) {
+                                            this.logger.debug(`Captured thought signature: ${signature.substring(0, 10)}...`);
+                                        }
+
+                                        // Pass through native Gemini format for Anthropic handler
+                                        const delta: OpenAI.StreamDelta = {
+                                            content: thinkingText,
+                                            // Custom fields for native Gemini format pass-through
+                                            _thought: true,
+                                            _thoughtSignature: signature,
+                                        } as any;
+
+                                        if (this.firstChunk) {
+                                            delta.role = "assistant";
+                                            this.firstChunk = false;
+                                        }
+
+                                        if (!thinkingInProgress) {
+                                            (delta as any)._thinkingStart = true;
+                                            thinkingInProgress = true;
+                                        }
+
+                                        yield this.createOpenAIChunk(delta, geminiCompletionRequest.model);
+                                    } else {
+                                        // Handle regular content
+                                        if (thinkingInProgress) {
+                                            // Signal end of thinking block
+                                            const closingDelta: OpenAI.StreamDelta = {
+                                                content: "",
+                                                _thinkingEnd: true,
+                                            } as any;
+                                            yield this.createOpenAIChunk(closingDelta, geminiCompletionRequest.model);
+                                            thinkingInProgress = false;
+                                        }
+
+                                        const delta: OpenAI.StreamDelta = { content: part.text };
+                                        if (this.firstChunk) {
+                                            delta.role = "assistant";
+                                            this.firstChunk = false;
+                                        }
+                                        yield this.createOpenAIChunk(delta, geminiCompletionRequest.model);
+                                    }
+                                }
+                                else if ("functionCall" in part) {
+                                    // Handle function calls from Gemini
+                                    if (thinkingInProgress) {
+                                        // Signal end of thinking block
+                                        const closingDelta: OpenAI.StreamDelta = {
+                                            content: "",
+                                            _thinkingEnd: true,
+                                        } as any;
+                                        yield this.createOpenAIChunk(closingDelta, geminiCompletionRequest.model);
+                                        thinkingInProgress = false;
+                                    }
+
+                                    // Get thoughtSignature from the part if available
+                                    const partSignature = (part as any).thought_signature || (part as any).thoughtSignature || "";
+
+                                    toolCallId = `call_${crypto.randomUUID()}`;
+                                    const delta: OpenAI.StreamDelta = {
+                                        tool_calls: [{
+                                            index: 0,
+                                            id: toolCallId,
+                                            type: "function",
+                                            function: {
+                                                name: part.functionCall.name,
+                                                arguments: JSON.stringify(part.functionCall.args)
+                                            },
+                                            // Pass through signature for tool calls
+                                            _thoughtSignature: partSignature,
+                                        } as any]
+                                    };
+
+                                    if (this.firstChunk) {
+                                        delta.role = "assistant";
+                                        delta.content = null;
+                                        this.firstChunk = false;
+                                    }
+
+                                    yield this.createOpenAIChunk(delta, geminiCompletionRequest.model);
+                                }
+                            }
+                        }
+
+                        if (jsonData.response?.usageMetadata) {
+                            const usage = jsonData.response.usageMetadata;
+                            const prompt_tokens = usage.promptTokenCount ?? 0;
+                            const completion_tokens = usage.candidatesTokenCount ?? 0;
+                            usageData = {
+                                prompt_tokens,
+                                completion_tokens,
+                                total_tokens: prompt_tokens + completion_tokens,
+                            };
+                        }
+
+                        if (candidate?.finishReason) {
+                            const fr = toolCallId ? "tool_calls" : "stop";
+                            const chunk = this.createOpenAIChunk({}, geminiCompletionRequest.model, fr);
+                            if (usageData) {
+                                chunk.usage = usageData;
+                            }
+                            yield chunk;
+                            this.logger.debug(`Stream explicitly finished due to finishReason: ${candidate.finishReason}`);
+                            return; // Exit the generator
+                        }
+                    } catch (parseError) {
+                        this.logger.error("Error parsing SSE JSON", parseError);
+                        bufferedLines = [];
+                    }
+                }
+                // Ignore other lines like comments or id fields
+            }
+
+            // Ensure thinking block is closed if the stream ends
+            if (thinkingInProgress) {
+                const closingDelta: OpenAI.StreamDelta = {
+                    content: "",
+                    _thinkingEnd: true,
+                } as any;
+                yield this.createOpenAIChunk(closingDelta, geminiCompletionRequest.model);
+            }
+
+            // Send final chunk with usage data
+            const finishReason = toolCallId ? "tool_calls" : "stop";
+            const finalChunk = this.createOpenAIChunk({}, geminiCompletionRequest.model, finishReason);
+
+            if (usageData) {
+                finalChunk.usage = usageData;
+            }
+
+            yield finalChunk;
+
+        } catch (error: any) {
+            // Handle 401 retry
+            if (error?.response?.status === 401 && !isRetry) {
                 this.logger.info("Got 401 error, forcing token refresh and retrying...");
                 this.authClient.credentials.access_token = undefined;
                 yield* this.streamContentInternal(geminiCompletionRequest, true);
                 return;
             }
-            const errorText = await response.text();
-            throw new GeminiApiError(
-                `Stream request failed: ${response.status} ${errorText}`,
-                response.status,
-                errorText
-            );
-        }
 
-        if (!response.body) {
-            throw new Error("Response has no body");
-        }
+            // Handle 429 rate limit errors specifically
+            if (error?.response?.status === 429) {
+                this.logger.warn("Rate limited (429). Parsing reset time...");
 
-        let toolCallId: string | undefined = undefined;
-        let usageData: OpenAI.UsageData | undefined;
-        let thinkingInProgress = false;
+                // Try to get retry-after from headers
+                const retryAfter = error.response.headers?.['retry-after'];
+                let resetMs = 60000; // Default 1 minute
 
-        for await (const jsonData of this.parseSSEStream(response.body)) {
-            const candidate = jsonData.response?.candidates?.[0];
+                if (retryAfter) {
+                    const seconds = parseInt(retryAfter, 10);
+                    if (!isNaN(seconds)) {
+                        resetMs = seconds * 1000;
+                    }
+                }
 
-            if (candidate?.content?.parts) {
-                for (const part of candidate.content.parts as Gemini.Part[]) {
-                    if ("text" in part) {
-                        // Handle text content
-                        if (part.thought === true) {
-                            // Handle thinking content from Gemini
-                            const thinkingText = part.text;
-                            const delta: OpenAI.StreamDelta = {};
-                            if (!thinkingInProgress) {
-                                delta.content = "<thinking>\n";
-                                if (this.firstChunk) {
-                                    delta.role = "assistant";
-                                    this.firstChunk = false;
-                                }
-                                yield this.createOpenAIChunk(delta, geminiCompletionRequest.model);
-                                thinkingInProgress = true;
+                // Try to extract reset time from error body
+                let errorBody = "";
+                try {
+                    const errorData = error.response.data;
+                    if (errorData) {
+                        if (typeof errorData.on === 'function') {
+                            // Stream
+                            const chunks: Buffer[] = [];
+                            await new Promise<void>((resolve) => {
+                                errorData.on('data', (d: any) => chunks.push(Buffer.from(d)));
+                                errorData.on('end', () => resolve());
+                                errorData.on('error', () => resolve());
+                                setTimeout(() => resolve(), 2000);
+                            });
+                            errorBody = Buffer.concat(chunks).toString('utf-8');
+                        } else if (typeof errorData === 'string') {
+                            errorBody = errorData;
+                        }
+                    }
+                } catch { /* ignore */ }
+
+                // Parse reset time from error body (Google sometimes includes it)
+                const resetMatch = errorBody.match(/quota.*?reset.*?(\d+)\s*(seconds?|minutes?|hours?)/i);
+                if (resetMatch) {
+                    const value = parseInt(resetMatch[1], 10);
+                    const unit = resetMatch[2].toLowerCase();
+                    if (unit.startsWith('minute')) {
+                        resetMs = value * 60 * 1000;
+                    } else if (unit.startsWith('hour')) {
+                        resetMs = value * 60 * 60 * 1000;
+                    } else {
+                        resetMs = value * 1000;
+                    }
+                }
+
+                const resetTime = new Date(Date.now() + resetMs).toISOString();
+                const humanReadable = resetMs >= 60000
+                    ? `${Math.ceil(resetMs / 60000)} minute(s)`
+                    : `${Math.ceil(resetMs / 1000)} second(s)`;
+
+                const errorMessage = `RESOURCE_EXHAUSTED: Rate limited on ${geminiCompletionRequest.model}. Quota will reset after ${humanReadable}. Next available: ${resetTime}`;
+                this.logger.error(errorMessage);
+                throw new GeminiApiError(errorMessage, 429, errorBody || undefined);
+            }
+
+            // Extract error message for other errors
+            let errorMessage = `Stream request failed: ${error?.message || error}`;
+            const statusCode = error?.response?.status || 500;
+
+            // Try to read error body from streaming response
+            if (error?.response) {
+                const logPath = "c:/Users/Administrator/Desktop/gemini-cli-proxy/debug.log";
+                try {
+                    fs.appendFileSync(logPath, `\n\n=== API ERROR ===\nStatus: ${error.response.status}\nHeaders: ${JSON.stringify(error.response.headers, null, 2)}\n`);
+
+                    const errorData = error.response.data;
+                    if (errorData) {
+                        if (typeof errorData.on === 'function') {
+                            // It's a stream
+                            const chunks: Buffer[] = [];
+                            try {
+                                const collected = await new Promise<Buffer[]>((resolve, reject) => {
+                                    const c: Buffer[] = [];
+                                    errorData.on('data', (d: any) => c.push(Buffer.from(d)));
+                                    errorData.on('end', () => resolve(c));
+                                    errorData.on('error', reject);
+                                    // Set a timeout for reading error body
+                                    setTimeout(() => resolve(c), 2000);
+                                });
+                                chunks.push(...collected);
+                            } catch (e) {
+                                fs.appendFileSync(logPath, `Error reading error stream: ${e}\n`);
                             }
 
-                            const thinkingDelta: OpenAI.StreamDelta = {content: thinkingText};
-                            yield this.createOpenAIChunk(thinkingDelta, geminiCompletionRequest.model);
+                            if (chunks.length > 0) {
+                                const errorBody = Buffer.concat(chunks).toString('utf-8');
+                                fs.appendFileSync(logPath, `Body (Stream):\n${errorBody}\n`);
+                                try {
+                                    const parsed = JSON.parse(errorBody);
+                                    if (parsed.error) {
+                                        errorMessage = `API Error ${parsed.error.code} (${parsed.error.status}): ${parsed.error.message}`;
+                                    }
+                                } catch { /* ignore */ }
+                            }
                         } else {
-                            // Handle regular content - only if it's not a thinking part
-                            if (thinkingInProgress) {
-                                // Close thinking tag before first real content if needed
-                                const closingDelta: OpenAI.StreamDelta = {content: "\n</thinking>\n\n"};
-                                yield this.createOpenAIChunk(closingDelta, geminiCompletionRequest.model);
-                                thinkingInProgress = false;
+                            // Not a stream (likely object or string)
+                            const dataStr = typeof errorData === 'string' ? errorData : JSON.stringify(errorData, null, 2);
+                            fs.appendFileSync(logPath, `Body (Data):\n${dataStr}\n`);
+                            if (errorData.error) {
+                                errorMessage = `API Error ${errorData.error.code} (${errorData.error.status}): ${errorData.error.message}`;
                             }
-
-                            const delta: OpenAI.StreamDelta = {content: part.text};
-                            if (this.firstChunk) {
-                                delta.role = "assistant";
-                                this.firstChunk = false;
-                            }
-                            yield this.createOpenAIChunk(delta, geminiCompletionRequest.model);
                         }
                     }
-                    else if ("functionCall" in part) {
-                        // Handle function calls from Gemini
-                        if (thinkingInProgress) {
-                            // Close thinking tag before function call if needed
-                            const closingDelta: OpenAI.StreamDelta = {content: "\n</thinking>\n\n"};
-                            yield this.createOpenAIChunk(closingDelta, geminiCompletionRequest.model);
-                            thinkingInProgress = false;
-                        }
-
-                        toolCallId = `call_${crypto.randomUUID()}`;
-                        const delta: OpenAI.StreamDelta = {
-                            tool_calls: [{
-                                index: 0,
-                                id: toolCallId,
-                                type: "function",
-                                function: {
-                                    name: part.functionCall.name,
-                                    arguments: JSON.stringify(part.functionCall.args)
-                                }
-                            }]
-                        };
-
-                        if (this.firstChunk) {
-                            delta.role = "assistant";
-                            delta.content = null;
-                            this.firstChunk = false;
-                        }
-
-                        yield this.createOpenAIChunk(delta, geminiCompletionRequest.model);
-                    }
+                } catch (e) {
+                    fs.appendFileSync(logPath, `\nError reading failure details: ${e}\n`);
                 }
             }
 
-            if (jsonData.response?.usageMetadata) {
-                const usage = jsonData.response.usageMetadata;
-                const prompt_tokens = usage.promptTokenCount ?? 0;
-                const completion_tokens = usage.candidatesTokenCount ?? 0;
-                usageData = {
-                    prompt_tokens,
-                    completion_tokens,
-                    total_tokens: prompt_tokens + completion_tokens,
-                };
-            }
+            this.logger.error("Error in streamContentInternal", error);
+            const responseText = errorMessage.includes("API Error") ? errorMessage : (error?.response?.data ? JSON.stringify(error.response.data) : undefined);
+            throw new GeminiApiError(errorMessage, statusCode, responseText);
         }
-
-        // Send final chunk with usage data
-        const finishReason = toolCallId ? "tool_calls" : "stop";
-        const finalChunk = this.createOpenAIChunk({}, geminiCompletionRequest.model, finishReason);
-
-        if (usageData) {
-            finalChunk.usage = usageData;
-        }
-
-        yield finalChunk;
     }
 
     /**
@@ -394,47 +678,4 @@ export class GeminiApiClient {
             usage: null
         };
     }
-
-    /**
-     * Parses a server-sent event (SSE) stream from the Gemini API.
-     */
-    private async* parseSSEStream(stream: ReadableStream<Uint8Array>): AsyncGenerator<Gemini.Response> {
-        const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
-        let buffer = "";
-        let objectBuffer = "";
-
-        while (true) {
-            const {done, value} = await reader.read();
-            if (done) {
-                if (objectBuffer) {
-                    try {
-                        yield JSON.parse(objectBuffer);
-                    } catch (e) {
-                        this.logger.error("Error parsing final SSE JSON object", e);
-                    }
-                }
-                break;
-            }
-
-            buffer += value;
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-                if (line.trim() === "") {
-                    if (objectBuffer) {
-                        try {
-                            yield JSON.parse(objectBuffer);
-                        } catch (e) {
-                            this.logger.error("Error parsing SSE JSON object", e);
-                        }
-                        objectBuffer = "";
-                    }
-                } else if (line.startsWith("data: ")) {
-                    objectBuffer += line.substring(6);
-                }
-            }
-        }
-    }
 }
-

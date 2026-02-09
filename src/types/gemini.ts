@@ -8,16 +8,18 @@ export type ChatCompletionRequestBody = {
     systemInstruction?: SystemInstruction;
     tools?: {
         functionDeclarations: FunctionDeclaration[] | undefined;
-    };
+    }[];
     toolConfig?: ToolConfig;
     generationConfig?: {
         temperature?: number;
         thinkingConfig?: ThinkingConfig;
+        maxOutputTokens?: number;
+        candidateCount?: number;
     };
 };
 
 export type ChatCompletionRequest = {
-    model: Model;
+    model: string; // Can be any Gemini model name, not just enum values
     project: string;
     request: ChatCompletionRequestBody;
 };
@@ -67,14 +69,15 @@ export type TextPart = {
 };
 
 export type Part =
-    | TextPart
-    | InlineDataPart
-    | FunctionCallPart
-    | FunctionResponsePart;
+    | (TextPart & { thoughtSignature?: string; thought_signature?: string; thought?: boolean })
+    | (InlineDataPart & { thoughtSignature?: string; thought_signature?: string })
+    | (FunctionCallPart & { thoughtSignature?: string; thought_signature?: string })
+    | (FunctionResponsePart & { thoughtSignature?: string; thought_signature?: string });
 
 export type ThinkingConfig = {
-    thinkingBudget: number;
+    thinkingBudget?: number;
     includeThoughts?: boolean;
+    thinkingLevel?: number | string;
 };
 
 export type ChatMessage = {
@@ -85,8 +88,9 @@ export type ChatMessage = {
 // Gemini API response types
 export type Candidate = {
     content?: {
-        parts?: Array<{text?: string}>;
+        parts?: Part[];
     };
+    finishReason?: string;
 };
 
 export type UsageMetadata = {
