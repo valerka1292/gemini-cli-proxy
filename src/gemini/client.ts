@@ -1,6 +1,5 @@
 import { OAuth2Client } from "google-auth-library";
 import * as readline from "node:readline";
-import * as fs from "node:fs";
 import * as OpenAI from "../types/openai.js";
 import * as Gemini from "../types/gemini.js";
 import { CODE_ASSIST_API_VERSION, CODE_ASSIST_ENDPOINT, CODE_ASSIST_ENDPOINT_FALLBACKS, OPENAI_CHAT_COMPLETION_OBJECT, MAX_RETRIES } from "../utils/constant.js";
@@ -298,12 +297,6 @@ export class GeminiApiClient {
             const installationId = "68260397-5066-4f72-b0d2-9f92585ddd1c";
             const quotaProjectId = payload.project || this.googleCloudProject || "nifty-iridium-3vpmb";
 
-            // Debug logging to file
-            const logFile = "c:/Users/Administrator/Desktop/gemini-cli-proxy/debug.log";
-            fs.appendFileSync(logFile, `\n\n=== New request ${new Date().toISOString()} ===\n`);
-            fs.appendFileSync(logFile, `URL: ${url}\n`);
-            fs.appendFileSync(logFile, `Model: ${payload.model}\n`);
-            fs.appendFileSync(logFile, `Full Payload:\n${JSON.stringify(payload, null, 2)}\n`);
 
             this.logger.info(`Making request to: ${url}`);
 
@@ -339,8 +332,7 @@ export class GeminiApiClient {
                 for await (const chunk of stream) {
                     errorBody += chunk.toString();
                 }
-                const logPath = "c:/Users/Administrator/Desktop/gemini-cli-proxy/debug.log";
-                fs.appendFileSync(logPath, `\n\n=== API ERROR 400 BODY ===\n${errorBody}\n`);
+                this.logger.error(`API ERROR 400 BODY: ${errorBody}`);
 
                 let errorMessage = `API call failed with status 400: ${errorBody}`;
                 try {
@@ -378,16 +370,7 @@ export class GeminiApiClient {
                         const jsonData = JSON.parse(bufferedLines.join("\n")) as Gemini.Response;
                         bufferedLines = []; // Reset the buffer after parsing
 
-                        // Debug log raw Gemini response
                         const candidate = jsonData.response?.candidates?.[0];
-                        if (candidate?.content?.parts) {
-                            for (const part of candidate.content.parts as any[]) {
-                                if (part.thought === true || part.thoughtSignature || part.thought_signature) {
-                                    fs.appendFileSync("c:/Users/Administrator/Desktop/gemini-cli-proxy/debug.log",
-                                        `\n=== GEMINI THOUGHT PART ===\n${JSON.stringify(part, null, 2)}\n`);
-                                }
-                            }
-                        }
 
                         if (candidate?.content?.parts) {
                             for (const part of candidate.content.parts as Gemini.Part[]) {
@@ -607,10 +590,7 @@ export class GeminiApiClient {
 
             // Try to read error body from streaming response
             if (error?.response) {
-                const logPath = "c:/Users/Administrator/Desktop/gemini-cli-proxy/debug.log";
                 try {
-                    fs.appendFileSync(logPath, `\n\n=== API ERROR ===\nStatus: ${error.response.status}\nHeaders: ${JSON.stringify(error.response.headers, null, 2)}\n`);
-
                     const errorData = error.response.data;
                     if (errorData) {
                         if (typeof errorData.on === 'function') {
@@ -622,17 +602,13 @@ export class GeminiApiClient {
                                     errorData.on('data', (d: any) => c.push(Buffer.from(d)));
                                     errorData.on('end', () => resolve(c));
                                     errorData.on('error', reject);
-                                    // Set a timeout for reading error body
                                     setTimeout(() => resolve(c), 2000);
                                 });
                                 chunks.push(...collected);
-                            } catch (e) {
-                                fs.appendFileSync(logPath, `Error reading error stream: ${e}\n`);
-                            }
+                            } catch { /* ignore */ }
 
                             if (chunks.length > 0) {
                                 const errorBody = Buffer.concat(chunks).toString('utf-8');
-                                fs.appendFileSync(logPath, `Body (Stream):\n${errorBody}\n`);
                                 try {
                                     const parsed = JSON.parse(errorBody);
                                     if (parsed.error) {
@@ -641,17 +617,12 @@ export class GeminiApiClient {
                                 } catch { /* ignore */ }
                             }
                         } else {
-                            // Not a stream (likely object or string)
-                            const dataStr = typeof errorData === 'string' ? errorData : JSON.stringify(errorData, null, 2);
-                            fs.appendFileSync(logPath, `Body (Data):\n${dataStr}\n`);
                             if (errorData.error) {
                                 errorMessage = `API Error ${errorData.error.code} (${errorData.error.status}): ${errorData.error.message}`;
                             }
                         }
                     }
-                } catch (e) {
-                    fs.appendFileSync(logPath, `\nError reading failure details: ${e}\n`);
-                }
+                } catch { /* ignore */ }
             }
 
             this.logger.error("Error in streamContentInternal", error);

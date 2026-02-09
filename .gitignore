@@ -19,3 +19,14 @@ junit.xml
 coverage/
 
 CLAUDE.md
+
+# Sensitive/Debug files
+requests/
+debug.log
+response.json
+anthropic_request.json
+test_output.txt
+test_mapper.js
+test_proxy.js
+test_tool_payload.json
+.serena/
