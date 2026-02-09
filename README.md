@@ -46,11 +46,34 @@ Google Gemini CodeAssist offers a generous free tier:
 ### Installation
 
 ```bash
-# Using npx (recommended)
-npx gemini-cli-proxy
+# Clone the repository
+git clone https://github.com/emrullahakclk/gemini-cli-proxy.git
+cd gemini-cli-proxy
 
-# Or install globally
-npm install -g gemini-cli-proxy
+# Install dependencies
+npm install
+
+# Start the server
+npm run dev
+```
+
+### For Production Use
+
+```bash
+# Build the project
+npm run build
+
+# Start production server
+npm start
+```
+
+### Global Installation (Optional)
+
+```bash
+# Install globally from GitHub
+npm install -g github:emrullahakclk/gemini-cli-proxy
+
+# Then run anywhere
 gemini-cli-proxy
 ```
 
@@ -69,7 +92,14 @@ Once running, the server provides:
 ## ⚙️ Configuration Options
 
 ```bash
-npx gemini-cli-proxy [options]
+# Development mode
+npm run dev -- [options]
+
+# Production mode (after npm run build)
+npm start -- [options]
+
+# If installed globally
+gemini-cli-proxy [options]
 ```
 
 | Option | Description | Default |
