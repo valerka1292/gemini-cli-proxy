@@ -118,6 +118,16 @@ export function createDashboardRouter(): express.Router {
         });
     });
 
+
+    router.get("/api/keys/:id/secret", requireDashboardAuth, (req, res) => {
+        const plaintext = dashboardStore.getApiKeyPlaintext(req.params.id);
+        if (!plaintext) {
+            return res.status(404).json({error: "API key secret is unavailable"});
+        }
+
+        return res.json({key: plaintext});
+    });
+
     router.patch("/api/keys/:id", requireDashboardAuth, (req, res) => {
         const patch = req.body as {name?: string; isActive?: boolean};
         const updated = dashboardStore.updateApiKey(req.params.id, patch);

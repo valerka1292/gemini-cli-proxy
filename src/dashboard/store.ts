@@ -40,6 +40,7 @@ export type ApiKeyRecord = {
     keyPrefix: string;
     keySuffix: string;
     hashedKey: string;
+    plaintextKey: string | null;
     createdAt: number;
     updatedAt: number;
     lastUsedAt: number | null;
@@ -115,6 +116,7 @@ class DashboardStore {
                 key_prefix TEXT NOT NULL,
                 key_suffix TEXT NOT NULL,
                 hashed_key TEXT UNIQUE NOT NULL,
+                plaintext_key TEXT,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
                 last_used_at INTEGER,
@@ -149,6 +151,11 @@ class DashboardStore {
         const insertModelPolicy = this.db.prepare("INSERT OR IGNORE INTO model_policies (model_id, enabled) VALUES (?, 1)");
         for (const model of SUPPORTED_MODELS) {
             insertModelPolicy.run(model);
+        }
+
+        const apiKeysColumns = this.db.prepare("PRAGMA table_info(api_keys)").all() as Array<{name: string}>;
+        if (!apiKeysColumns.some((column) => column.name === "plaintext_key")) {
+            this.db.exec("ALTER TABLE api_keys ADD COLUMN plaintext_key TEXT");
         }
     }
 
@@ -322,6 +329,7 @@ class DashboardStore {
             keyPrefix: plaintext.slice(0, 8),
             keySuffix: plaintext.slice(-4),
             hashedKey: this.hashApiKey(plaintext),
+            plaintextKey: plaintext,
             createdAt: now(),
             updatedAt: now(),
             lastUsedAt: null,
@@ -330,14 +338,15 @@ class DashboardStore {
         };
 
         this.db.prepare(`
-            INSERT INTO api_keys (id, name, key_prefix, key_suffix, hashed_key, created_at, updated_at, last_used_at, owner_user_id, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, 1)
+            INSERT INTO api_keys (id, name, key_prefix, key_suffix, hashed_key, plaintext_key, created_at, updated_at, last_used_at, owner_user_id, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 1)
         `).run(
             record.id,
             record.name,
             record.keyPrefix,
             record.keySuffix,
             record.hashedKey,
+            record.plaintextKey,
             record.createdAt,
             record.updatedAt,
             record.ownerUserId,
@@ -353,6 +362,7 @@ class DashboardStore {
             key_prefix: string;
             key_suffix: string;
             hashed_key: string;
+            plaintext_key: string | null;
             created_at: number;
             updated_at: number;
             last_used_at: number | null;
@@ -366,6 +376,7 @@ class DashboardStore {
             keyPrefix: row.key_prefix,
             keySuffix: row.key_suffix,
             hashedKey: row.hashed_key,
+            plaintextKey: row.plaintext_key,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
             lastUsedAt: row.last_used_at,
@@ -410,6 +421,7 @@ class DashboardStore {
             key_prefix: string;
             key_suffix: string;
             hashed_key: string;
+            plaintext_key: string | null;
             created_at: number;
             updated_at: number;
             last_used_at: number | null;
@@ -428,12 +440,18 @@ class DashboardStore {
             keyPrefix: row.key_prefix,
             keySuffix: row.key_suffix,
             hashedKey: row.hashed_key,
+            plaintextKey: row.plaintext_key,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
             lastUsedAt: lastUsed,
             ownerUserId: row.owner_user_id,
             isActive: Boolean(row.is_active),
         };
+    }
+
+    getApiKeyPlaintext(id: string): string | null {
+        const row = this.db.prepare("SELECT plaintext_key FROM api_keys WHERE id = ? LIMIT 1").get(id) as {plaintext_key: string | null} | undefined;
+        return row?.plaintext_key ?? null;
     }
 
     isModelEnabled(model: string): boolean {

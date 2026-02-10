@@ -237,6 +237,18 @@ function App() {
         setAlertNotice({title: "API key revoked", message: `Key "${keyToDelete.name}" was deleted.`, tone: "info"});
     };
 
+    const copyStoredKey = async (apiKey: ApiKey) => {
+        const res = await fetch(`/dashboard/api/keys/${apiKey.id}/secret`, {headers: authHeaders});
+        const data = await res.json();
+        if (!res.ok || !data.key) {
+            setAlertNotice({title: "Copy failed", message: data.error ?? "Unable to load key from database", tone: "error"});
+            return;
+        }
+
+        await copyText(data.key, "API key copied");
+    };
+
+
     const toggleModel = async (id: string, enabled: boolean) => {
         await fetch(`/dashboard/api/models/${id}`, {
             method: "PATCH",
@@ -342,7 +354,7 @@ function App() {
                                             <td>{new Date(k.createdAt).toLocaleDateString()}</td>
                                             <td>{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : "Never"}</td>
                                             <td className="actions-cell">
-                                                <button className="icon-btn" onClick={() => copyText(k.maskedKey, "Masked key copied") } title="Copy masked key">
+                                                <button className="icon-btn" onClick={() => copyStoredKey(k)} title="Copy API key">
                                                     <Icon path="M9 9h11v11H9zM4 15V4h11" />
                                                 </button>
                                                 <button className="icon-btn danger" onClick={() => setKeyToDelete(k)} title="Revoke key">
