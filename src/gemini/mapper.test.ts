@@ -22,7 +22,16 @@ describe("mapModelToGemini", () => {
     it("should handle all valid Gemini models", () => {
         Object.values(Gemini.Model).forEach(model => {
             const result = mapModelToGemini(model);
-            expect(result).toBe(model);
+            // Some enum values might be aliases that map to a preview version
+            if (model === Gemini.Model.Gemini25FlashLite) {
+                expect(result).toBe(Gemini.Model.Gemini25FlashLitePreview);
+            } else if (model === Gemini.Model.Gemini3ProHigh || model === Gemini.Model.Gemini3Pro) {
+                expect(result).toBe(Gemini.Model.Gemini3ProPreview);
+            } else if (model === Gemini.Model.Gemini3Flash || model === Gemini.Model.Gemini3) {
+                expect(result).toBe(Gemini.Model.Gemini3FlashPreview);
+            } else {
+                expect(result).toBe(model);
+            }
         });
     });
 });

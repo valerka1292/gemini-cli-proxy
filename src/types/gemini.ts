@@ -1,6 +1,14 @@
 export enum Model {
     Gemini25Flash = "gemini-2.5-flash",
     Gemini25Pro = "gemini-2.5-pro",
+    Gemini25FlashLite = "gemini-2.5-flash-lite",
+    Gemini25FlashLitePreview = "gemini-2.5-flash-lite-preview",
+    Gemini3ProHigh = "gemini-3-pro-high",
+    Gemini3Pro = "gemini-3-pro",
+    Gemini3ProPreview = "gemini-3-pro-preview",
+    Gemini3Flash = "gemini-3-flash",
+    Gemini3FlashPreview = "gemini-3-flash-preview",
+    Gemini3 = "gemini-3",
 }
 
 export type ChatCompletionRequestBody = {
