@@ -24,9 +24,12 @@ export const RATE_LIMIT_STATUS_CODES = [429, 503] as const;
 // Rate limit wait thresholds
 export const MAX_WAIT_BEFORE_ERROR_MS = 120000; // 2 minutes - throw error if wait exceeds this
 
-// Model Fallback Mapping - NO FALLBACKS (pro stays pro)
+// Model fallback mapping for automatic downgrade on rate limits
 export const AUTO_SWITCH_MODEL_MAP = {
-    // Empty - no automatic model switching, rate limit errors are returned as-is
+    "gemini-2.5-pro": "gemini-2.5-flash",
+    "gemini-3-pro": "gemini-3-flash",
+    "gemini-3-pro-preview": "gemini-3-flash-preview",
+    "gemini-3-pro-high": "gemini-3-flash",
 } as const;
 
 // Cooldown Configuration  
@@ -34,5 +37,4 @@ export const DEFAULT_COOLDOWN_MINUTES = 10;
 
 // Max retries for rate limit errors
 export const MAX_RETRIES = 3;
-
 

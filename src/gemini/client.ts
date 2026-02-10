@@ -50,6 +50,37 @@ export class GeminiApiClient {
         this.logger = getLogger("GEMINI-CLIENT", chalk.blue);
     }
 
+    private isFlashModel(model: string): boolean {
+        return model.toLowerCase().includes("flash");
+    }
+
+    private extractNextAvailableDate(error: GeminiApiError): Date | null {
+        const sources = [error.message, error.responseText].filter((value): value is string => Boolean(value));
+        for (const source of sources) {
+            const nextAvailableMatch = source.match(/Next available:\s*([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z)/i);
+            if (nextAvailableMatch?.[1]) {
+                const parsedDate = new Date(nextAvailableMatch[1]);
+                if (!Number.isNaN(parsedDate.getTime())) {
+                    return parsedDate;
+                }
+            }
+        }
+        return null;
+    }
+
+    private formatLocalDateTime(date: Date): string {
+        return new Intl.DateTimeFormat(undefined, {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "numeric",
+            minute: "2-digit",
+            second: "2-digit",
+            fractionalSecondDigits: 3,
+            hour12: true,
+        }).format(date);
+    }
+
     /**
      * Discovers the Google Cloud project ID.
      */
@@ -240,35 +271,54 @@ export class GeminiApiClient {
         geminiCompletionRequest: Gemini.ChatCompletionRequest,
         isRetry: boolean = false,
     ): AsyncGenerator<OpenAI.StreamChunk> {
-        try {
-            yield* this.streamContentInternal(geminiCompletionRequest, isRetry);
-        } catch (error) {
-            if (error instanceof GeminiApiError &&
-                !this.disableAutoModelSwitch &&
-                this.autoSwitcher.isRateLimitError(error.statusCode) &&
-                this.autoSwitcher.shouldAttemptFallback(geminiCompletionRequest.model)) {
-
-                // eslint-disable-next-line @typescript-eslint/no-this-alias
-                const self = this;
-                yield* this.autoSwitcher.handleStreamingFallback(
-                    geminiCompletionRequest.model,
-                    error.statusCode,
-                    geminiCompletionRequest,
-                    async function* (model: string, data: RetryableRequestData) {
-                        const updatedRequest = {...data, model} as Gemini.ChatCompletionRequest;
-                        // Create new client instance to reset firstChunk state
-                        const fallbackClient = new GeminiApiClient(
-                            self.authClient,
-                            self.googleCloudProject,
-                            self.disableAutoModelSwitch,
-                        );
-                        yield* fallbackClient.streamContent(updatedRequest, isRetry);
-                    },
-                    "openai"
-                ) as AsyncIterable<OpenAI.StreamChunk>;
+        while (true) {
+            try {
+                yield* this.streamContentInternal(geminiCompletionRequest, isRetry);
                 return;
+            } catch (error) {
+                if (error instanceof GeminiApiError &&
+                    !this.disableAutoModelSwitch &&
+                    this.autoSwitcher.isRateLimitError(error.statusCode) &&
+                    this.autoSwitcher.shouldAttemptFallback(geminiCompletionRequest.model)) {
+
+                    // eslint-disable-next-line @typescript-eslint/no-this-alias
+                    const self = this;
+                    yield* this.autoSwitcher.handleStreamingFallback(
+                        geminiCompletionRequest.model,
+                        error.statusCode,
+                        geminiCompletionRequest,
+                        async function* (model: string, data: RetryableRequestData) {
+                            const updatedRequest = {...data, model} as Gemini.ChatCompletionRequest;
+                            // Create new client instance to reset firstChunk state
+                            const fallbackClient = new GeminiApiClient(
+                                self.authClient,
+                                self.googleCloudProject,
+                                self.disableAutoModelSwitch,
+                            );
+                            yield* fallbackClient.streamContent(updatedRequest, isRetry);
+                        },
+                        "openai"
+                    ) as AsyncIterable<OpenAI.StreamChunk>;
+                    return;
+                }
+
+                if (error instanceof GeminiApiError &&
+                    this.autoSwitcher.isRateLimitError(error.statusCode) &&
+                    this.isFlashModel(geminiCompletionRequest.model)) {
+                    const nextAvailableDate = this.extractNextAvailableDate(error);
+                    const now = Date.now();
+                    const waitMs = nextAvailableDate
+                        ? Math.max(0, nextAvailableDate.getTime() - now)
+                        : 60000;
+                    const localTime = this.formatLocalDateTime(new Date(now + waitMs));
+
+                    this.logger.warn(`Rate limited on ${geminiCompletionRequest.model}. Waiting until local time ${localTime} before retrying...`);
+                    await new Promise((resolve) => setTimeout(resolve, waitMs));
+                    continue;
+                }
+
+                throw error;
             }
-            throw error;
         }
     }
 
