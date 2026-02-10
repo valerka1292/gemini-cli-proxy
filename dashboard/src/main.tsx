@@ -23,24 +23,30 @@ function formatNumber(value: number) {
     return new Intl.NumberFormat("en-US").format(value);
 }
 
+function Icon({path, className}: {path: string; className?: string}) {
+    return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d={path} />
+        </svg>
+    );
+}
+
 function UsageChart({points}: {points: UsageSummary["byDay"]}) {
-    if (!points.length) {
-        return <div className="empty">No usage data yet.</div>;
-    }
+    if (!points.length) return <div className="empty">No usage data yet.</div>;
 
     const max = Math.max(...points.map((point) => point.requests), 1);
-    const width = 820;
-    const height = 230;
+    const width = 860;
+    const height = 260;
     const step = points.length > 1 ? width / (points.length - 1) : width;
 
     return (
         <div className="chart-wrap">
             <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="chart">
                 {points.map((point, index) => {
-                    const x = index * step - 4;
-                    const barHeight = (point.requests / max) * (height - 18);
+                    const x = index * step - 10;
+                    const barHeight = (point.requests / max) * (height - 24);
                     const y = height - barHeight;
-                    return <rect key={`${point.day}-bar`} className="bar-hover" x={x} y={y} width="8" height={barHeight} fill="rgba(16,163,127,0.45)" rx="2" />;
+                    return <rect key={`${point.day}-bar`} className="bar-hover" x={x} y={y} width="20" height={barHeight} fill="rgba(255,255,255,0.16)" rx="4" />;
                 })}
             </svg>
             <div className="chart-footer">
@@ -67,6 +73,21 @@ function App() {
 
     const authHeaders = useMemo(() => ({Authorization: `Bearer ${token}`, "Content-Type": "application/json"}), [token]);
 
+    const clearToken = () => {
+        localStorage.removeItem(tokenKey);
+        setToken("");
+        setUser(null);
+    };
+
+    const copyText = async (text: string, successMessage: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            alert(successMessage);
+        } catch {
+            alert("Unable to copy automatically. Please copy manually.");
+        }
+    };
+
     const refreshAuthedData = async () => {
         const [meRes, keysRes, modelsRes, usageRes] = await Promise.all([
             fetch("/dashboard/api/me", {headers: authHeaders}),
@@ -76,9 +97,7 @@ function App() {
         ]);
 
         if (!meRes.ok) {
-            setUser(null);
-            localStorage.removeItem(tokenKey);
-            setToken("");
+            clearToken();
             return;
         }
 
@@ -167,9 +186,7 @@ function App() {
         return (
             <div className="auth-wrap">
                 <div className="auth-panel">
-                    <div className="auth-header">
-                        <h1>OpenGemini Dashboard</h1>
-                    </div>
+                    <div className="auth-header"><h1>OpenGemini Dashboard</h1></div>
                     <label>Email</label>
                     <input placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
                     <label>Password</label>
@@ -185,135 +202,144 @@ function App() {
     }
 
     return (
-        <div className="page">
+        <div className="app-shell">
             <aside className="sidebar">
-                <div className="logo">
-                    <div className="logo-icon">P</div>
-                    Personal
+                <div className="project-line">
+                    <div className="avatar">P</div>
+                    <div>
+                        <strong>Personal</strong>
+                        <span>Default project</span>
+                    </div>
                 </div>
 
-                <div className="menu-section">Manage</div>
+                <div className="menu-group">Manage</div>
                 <button className={`menu-item ${activeSection === "usage" ? "active" : ""}`} onClick={() => setActiveSection("usage")}>
-                    📊 Usage
+                    <Icon className="menu-icon" path="M3 3v18h18M8 14l3-3 2 2 5-5" /> Usage
                 </button>
                 <button className={`menu-item ${activeSection === "keys" ? "active" : ""}`} onClick={() => setActiveSection("keys")}>
-                    🔑 API keys
+                    <Icon className="menu-icon" path="M15 7a4 4 0 1 0-7.8 1.3L3 12.5V16h3.5l1.5-1.5V13h1.5l1.5-1.5V10h.3A4 4 0 0 0 15 7Z" /> API keys
                 </button>
-
-                <div className="menu-section">Configuration</div>
                 <button className={`menu-item ${activeSection === "models" ? "active" : ""}`} onClick={() => setActiveSection("models")}>
-                    🤖 Models
+                    <Icon className="menu-icon" path="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2Zm0 0v20" /> Models
                 </button>
 
-                <div style={{marginTop: "auto"}}>
-                    <button className="menu-item" onClick={() => { localStorage.removeItem(tokenKey); setToken(""); }}>Log out</button>
+                <div className="sidebar-footer">
+                    <button className="token-action" onClick={() => copyText(token, "Auth token copied") }>
+                        <Icon className="menu-icon" path="M9 9h11v11H9zM4 15V4h11" /> Copy token
+                    </button>
+                    <button className="token-action danger" onClick={clearToken}>
+                        <Icon className="menu-icon" path="M3 6h18M8 6V4h8v2m-1 0v14H9V6" /> Remove token
+                    </button>
                 </div>
             </aside>
 
-            <main className="content">
-                {activeSection === "keys" && (
-                    <section>
-                        <div className="row-between">
-                            <div><h2>API keys</h2></div>
-                            <button className="primary" onClick={createKey}>+ Create new secret key</button>
-                        </div>
-                        <p className="description">
-                            Your secret API keys are listed below. Please note that we do not display your secret keys again after you generate them.
-                            Do not share your API key with others.
-                        </p>
+            <div className="content-wrap">
+                <header className="top-nav">
+                    <div className="top-links"><strong>Dashboard</strong><span>API Docs</span></div>
+                    <div className="user-pill">{user.email.slice(0, 1).toUpperCase()}</div>
+                </header>
 
-                        {createdKey && (
-                            <div className="banner" style={{marginBottom: 20, background: "#10261e", border: "1px solid #10a37f", color: "#fff"}}>
-                                <strong>Save this key:</strong> <code style={{color: "#fff", background: "transparent"}}>{createdKey}</code>
+                <main className="content-card">
+                    {activeSection === "keys" && (
+                        <section>
+                            <div className="section-header">
+                                <h2>API keys</h2>
+                                <button className="primary" onClick={createKey}><Icon className="button-icon" path="M12 5v14M5 12h14" />Create new secret key</button>
                             </div>
-                        )}
+                            <p className="description">Manage secret keys for this project. Keep them secure and rotate regularly.</p>
 
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th style={{width: "25%"}}>NAME</th>
-                                    <th style={{width: "15%"}}>STATUS</th>
-                                    <th style={{width: "30%"}}>SECRET KEY</th>
-                                    <th style={{width: "15%"}}>CREATED</th>
-                                    <th style={{width: "15%"}}>LAST USED</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {apiKeys.map((k) => (
-                                    <tr key={k.id}>
-                                        <td>{k.name}</td>
-                                        <td><span className={`badge ${k.isActive ? "active" : "inactive"}`}>{k.isActive ? "Active" : "Disabled"}</span></td>
-                                        <td className="masked-key">{k.maskedKey}</td>
-                                        <td>{new Date(k.createdAt).toLocaleDateString()}</td>
-                                        <td>{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : "Never"}</td>
-                                        <td style={{textAlign: "right"}}><button className="danger" onClick={() => deleteKey(k.id)}>Revoke</button></td>
+                            {createdKey && (
+                                <div className="banner">
+                                    <div>
+                                        <strong>Save this key now:</strong> <code>{createdKey}</code>
+                                    </div>
+                                    <button className="icon-btn" onClick={() => copyText(createdKey, "New API key copied") } title="Copy key">
+                                        <Icon path="M9 9h11v11H9zM4 15V4h11" />
+                                    </button>
+                                </div>
+                            )}
+
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>NAME</th><th>STATUS</th><th>SECRET KEY</th><th>CREATED</th><th>LAST USED</th><th></th>
                                     </tr>
+                                </thead>
+                                <tbody>
+                                    {apiKeys.map((k) => (
+                                        <tr key={k.id}>
+                                            <td>{k.name}</td>
+                                            <td><span className={`badge ${k.isActive ? "active" : "inactive"}`}>{k.isActive ? "Active" : "Disabled"}</span></td>
+                                            <td className="masked-key">{k.maskedKey}</td>
+                                            <td>{new Date(k.createdAt).toLocaleDateString()}</td>
+                                            <td>{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : "Never"}</td>
+                                            <td className="actions-cell">
+                                                <button className="icon-btn" onClick={() => copyText(k.maskedKey, "Masked key copied") } title="Copy masked key">
+                                                    <Icon path="M9 9h11v11H9zM4 15V4h11" />
+                                                </button>
+                                                <button className="icon-btn danger" onClick={() => deleteKey(k.id)} title="Revoke key">
+                                                    <Icon path="M3 6h18M8 6V4h8v2m-1 0v14H9V6" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </section>
+                    )}
+
+                    {activeSection === "usage" && usage && (
+                        <section>
+                            <div className="section-header"><h2>Usage</h2></div>
+                            <div className="stats-grid">
+                                <div className="stat-box"><span>Total requests</span><strong>{formatNumber(usage.totalRequests)}</strong></div>
+                                <div className="stat-box"><span>Input tokens</span><strong>{formatNumber(usage.totalInputTokens)}</strong></div>
+                                <div className="stat-box"><span>Output tokens</span><strong>{formatNumber(usage.totalOutputTokens)}</strong></div>
+                            </div>
+                            <div className="panel">
+                                <h3>Activity</h3>
+                                <UsageChart points={usage.byDay} />
+                            </div>
+                            <div className="two-columns">
+                                <div className="panel">
+                                    <h3>By model</h3>
+                                    <table>
+                                        <thead><tr><th>Model</th><th className="align-right">Requests</th></tr></thead>
+                                        <tbody>
+                                            {usage.byModel.filter((m) => m.requests > 0).map((m) => (
+                                                <tr key={m.model}><td>{m.model}</td><td className="align-right">{m.requests}</td></tr>
+                                            ))}
+                                            {usage.byModel.every((m) => m.requests === 0) && <tr><td colSpan={2} className="empty-cell">No data</td></tr>}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="panel">
+                                    <h3>By API key</h3>
+                                    <table>
+                                        <thead><tr><th>Key name</th><th className="align-right">Usage</th></tr></thead>
+                                        <tbody>{usage.byApiKey.map((k) => <tr key={k.id}><td>{k.name}</td><td className="align-right">{k.requests} reqs</td></tr>)}</tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
+                    {activeSection === "models" && (
+                        <section>
+                            <div className="section-header"><h2>Model configuration</h2></div>
+                            <p className="description">Enable or disable specific Gemini models for this proxy.</p>
+                            <div className="models-grid">
+                                {models.map((m) => (
+                                    <label key={m.id} className="model-item">
+                                        <span>{m.id}</span>
+                                        <input type="checkbox" checked={m.enabled} onChange={(e) => toggleModel(m.id, e.target.checked)} />
+                                    </label>
                                 ))}
-                            </tbody>
-                        </table>
-                    </section>
-                )}
-
-                {activeSection === "usage" && usage && (
-                    <section>
-                        <div className="topbar"><h2>Usage</h2></div>
-
-                        <div className="stats-header">
-                            <div className="stat-box"><span>Requests</span><strong>{formatNumber(usage.totalRequests)}</strong></div>
-                            <div className="stat-box"><span>Tokens Generated</span><strong>{formatNumber(usage.totalOutputTokens)}</strong></div>
-                        </div>
-
-                        <div className="card">
-                            <h3>Activity</h3>
-                            <div className="chart-container"><UsageChart points={usage.byDay} /></div>
-                        </div>
-
-                        <div className="row-between" style={{alignItems: "flex-start", gap: 40}}>
-                            <div style={{flex: 1}}>
-                                <h3>By Model</h3>
-                                <table>
-                                    <thead><tr><th>Model</th><th style={{textAlign: "right"}}>Requests</th></tr></thead>
-                                    <tbody>
-                                        {usage.byModel.filter((m) => m.requests > 0).map((m) => (
-                                            <tr key={m.model}><td>{m.model}</td><td style={{textAlign: "right"}}>{m.requests}</td></tr>
-                                        ))}
-                                        {usage.byModel.every((m) => m.requests === 0) && <tr><td colSpan={2} style={{color: "#666", textAlign: "center"}}>No data</td></tr>}
-                                    </tbody>
-                                </table>
                             </div>
-                            <div style={{flex: 1}}>
-                                <h3>By API Key</h3>
-                                <table>
-                                    <thead><tr><th>Key Name</th><th style={{textAlign: "right"}}>Usage</th></tr></thead>
-                                    <tbody>
-                                        {usage.byApiKey.map((k) => (
-                                            <tr key={k.id}><td>{k.name}</td><td style={{textAlign: "right"}}>{k.requests} reqs</td></tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </section>
-                )}
-
-                {activeSection === "models" && (
-                    <section>
-                        <div className="topbar">
-                            <h2>Model Configuration</h2>
-                            <div className="topbar-sub">Enable or disable specific Gemini models for this proxy.</div>
-                        </div>
-                        <div className="models-grid">
-                            {models.map((m) => (
-                                <label key={m.id} className="model-item">
-                                    <span>{m.id}</span>
-                                    <input type="checkbox" checked={m.enabled} onChange={(e) => toggleModel(m.id, e.target.checked)} />
-                                </label>
-                            ))}
-                        </div>
-                    </section>
-                )}
-            </main>
+                        </section>
+                    )}
+                </main>
+            </div>
         </div>
     );
 }
