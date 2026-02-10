@@ -1,7 +1,8 @@
 import * as Anthropic from "../types/anthropic.js";
 import * as Gemini from "../types/gemini.js";
-import { DEFAULT_TEMPERATURE } from "../utils/constant.js";
-import { mapModelToGemini, mapJsonSchemaToGemini } from "./mapper.js";
+import * as OpenAI from "../types/openai.js";
+import {DEFAULT_TEMPERATURE} from "../utils/constant.js";
+import {mapModelToGemini, mapJsonSchemaToGemini} from "./mapper.js";
 
 export const mapAnthropicMessagesRequestToGemini = (
     project: string,
@@ -19,15 +20,15 @@ export const mapAnthropicMessagesRequestToGemini = (
 
     // Add interleaved thinking hint for Claude models with tools
     if (request.tools && request.tools.length > 0) {
-        const hint = 'Interleaved thinking is enabled. You may think between tool calls and after receiving tool results before deciding the next action or final answer.';
+        const hint = "Interleaved thinking is enabled. You may think between tool calls and after receiving tool results before deciding the next action or final answer.";
         if (!geminiRequest.systemInstruction) {
-            geminiRequest.systemInstruction = { parts: [{ text: hint }] };
+            geminiRequest.systemInstruction = {parts: [{text: hint}]};
         } else {
             const lastPart = geminiRequest.systemInstruction.parts[geminiRequest.systemInstruction.parts.length - 1];
             if (lastPart) {
                 lastPart.text = `${lastPart.text}\n\n${hint}`;
             } else {
-                geminiRequest.systemInstruction.parts.push({ text: hint });
+                geminiRequest.systemInstruction.parts.push({text: hint});
             }
         }
     }
@@ -44,13 +45,13 @@ export const mapAnthropicMessagesRequestToGemini = (
     }
 
     if (request.system) {
-        let parts: { text: string }[] = [];
+        let parts: Array<{text: string}> = [];
         if (typeof request.system === "string") {
-            parts = [{ text: request.system }];
+            parts = [{text: request.system}];
         } else {
             parts = request.system
                 .filter((msg) => msg.type === "text")
-                .map((msg) => ({ text: msg.text }));
+                .map((msg) => ({text: msg.text}));
         }
 
         if (parts.length > 0) {
@@ -93,7 +94,9 @@ const mapAnthropicMessagesToGeminiFormat = (messages: Anthropic.Message[]): Gemi
     return geminiMessages;
 };
 
-const SYNTHETIC_THOUGHT_SIGNATURE = 'skip_thought_signature_validator';
+const SYNTHETIC_THOUGHT_SIGNATURE = "skip_thought_signature_validator";
+
+const isToolUseContent = (content: Anthropic.RequestContent): content is Anthropic.ToolUse => content.type === "tool_use";
 
 const mapAnthropicMessageToGeminiFormat = (message: Anthropic.Message, allMessages: Anthropic.Message[]): Gemini.ChatMessage => {
     const role = message.role === "assistant" ? "model" : "user";
@@ -101,7 +104,7 @@ const mapAnthropicMessageToGeminiFormat = (message: Anthropic.Message, allMessag
     if (typeof message.content === "string") {
         return {
             role,
-            parts: [{ text: message.content }]
+            parts: [{text: message.content}]
         };
     }
 
@@ -112,13 +115,10 @@ const mapAnthropicMessageToGeminiFormat = (message: Anthropic.Message, allMessag
     for (const content of contentBlocks) {
         if (content.type === "text") {
             let text = content.text ?? "";
-            if (text.trim().length === 0) {
-                continue;
-            }
             if (!text.endsWith("\n")) {
                 text += "\n";
             }
-            parts.push({ text });
+            parts.push({text});
         } else if (content.type === "image") {
             const imageContent = content as Anthropic.ImageContent;
             parts.push({
@@ -143,32 +143,32 @@ const mapAnthropicMessageToGeminiFormat = (message: Anthropic.Message, allMessag
             let toolName = "unknown_tool";
             for (const msg of allMessages) {
                 if (Array.isArray(msg.content)) {
-                    const toolUse = msg.content.find(c => c.type === "tool_use" && (c as any).id === content.tool_use_id);
+                    const toolUse = msg.content.find((c): c is Anthropic.ToolUse => isToolUseContent(c) && c.id === content.tool_use_id);
                     if (toolUse) {
-                        toolName = (toolUse as any).name;
+                        toolName = toolUse.name;
                         break;
                     }
                 }
             }
 
-            let response: any;
-            if (typeof content.content === 'string') {
-                response = { result: content.content };
+            let response: {result: string};
+            if (typeof content.content === "string") {
+                response = {result: content.content};
             } else if (Array.isArray(content.content)) {
                 // Combine text content from tool result
                 const textParts = content.content
-                    .filter(c => c.type === 'text')
-                    .map(c => (c as any).text)
-                    .join('\n');
-                response = { result: textParts };
+                    .filter(c => c.type === "text")
+                    .map(c => c.text)
+                    .join("\n");
+                response = {result: textParts};
             } else {
-                response = { result: "Success" }; // Default if empty
+                response = {result: "Success"}; // Default if empty
             }
 
             parts.push({
                 functionResponse: {
                     name: toolName,
-                    response: response
+                    response
                 }
             });
         } else if (content.type === "thinking") {
@@ -181,15 +181,15 @@ const mapAnthropicMessageToGeminiFormat = (message: Anthropic.Message, allMessag
 
     // Safety check: Gemini doesn't allow empty parts
     if (parts.length === 0) {
-        parts = [{ text: "." }];
+        parts = [{text: "."}];
     }
 
-    return { role, parts };
+    return {role, parts};
 };
 
-const convertAnthropicToolToGemini = (tool: any): Gemini.FunctionDeclaration => {
+const convertAnthropicToolToGemini = (tool: Anthropic.Tool | OpenAI.Tool): Gemini.FunctionDeclaration => {
     // Support both Anthropic and OpenAI tool formats
-    if (tool.type === "function" && tool.function) {
+    if ("function" in tool && tool.type === "function") {
         const parameters = mapJsonSchemaToGemini(tool.function.parameters);
         return {
             name: tool.function.name,
@@ -199,10 +199,11 @@ const convertAnthropicToolToGemini = (tool: any): Gemini.FunctionDeclaration => 
     }
 
     // Standard Anthropic format
-    const parameters = mapJsonSchemaToGemini(tool.input_schema);
+    const anthropicTool = tool as Anthropic.Tool;
+    const parameters = mapJsonSchemaToGemini(anthropicTool.input_schema);
     return {
-        name: tool.name,
-        description: tool.description,
+        name: anthropicTool.name,
+        description: anthropicTool.description,
         parameters
     };
 };
@@ -242,7 +243,7 @@ const mapAnthropicToolChoiceToGemini = (toolChoice: Anthropic.ToolChoice): Gemin
 
 // Helper function to map Gemini response back to Anthropic format
 export const mapGeminiResponseToAnthropic = (
-    geminiResponse: { content?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>; usage?: { inputTokens?: number; outputTokens?: number } },
+    geminiResponse: {content?: string; tool_calls?: Array<{id: string; function: {name: string; arguments: string}}>; usage?: {inputTokens?: number; outputTokens?: number}},
     model: string,
     requestId: string
 ): Anthropic.MessagesResponse => {

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { mapOpenAIChatCompletionRequestToGemini } from "./openai-mapper.js";
+import {describe, it, expect} from "vitest";
+import {mapOpenAIChatCompletionRequestToGemini} from "./openai-mapper.js";
 import * as OpenAI from "../types/openai.js";
 import * as Gemini from "../types/gemini.js";
 
@@ -21,7 +21,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
         expect(result.project).toBe("test-project");
         expect(result.request.contents).toHaveLength(1);
         expect(result.request.contents[0].role).toBe("user");
-        expect(result.request.contents[0].parts).toEqual([{ text: "Hello world" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "Hello world"}]);
     });
 
     it("should map request with temperature", () => {
@@ -59,7 +59,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
         expect(result.request.systemInstruction).toEqual({
-            parts: [{ text: "You are a helpful assistant" }]
+            parts: [{text: "You are a helpful assistant"}]
         });
         expect(result.request.contents).toHaveLength(1);
         expect(result.request.contents[0].role).toBe("user");
@@ -83,7 +83,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
         expect(result.request.systemInstruction).toEqual({
-            parts: [{ text: "You are a code assistant" }]
+            parts: [{text: "You are a code assistant"}]
         });
     });
 
@@ -94,8 +94,8 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
                 {
                     role: "system",
                     content: [
-                        { type: "text", text: "You are " },
-                        { type: "text", text: "a helpful assistant" }
+                        {type: "text", text: "You are "},
+                        {type: "text", text: "a helpful assistant"}
                     ]
                 },
                 {
@@ -108,7 +108,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
         expect(result.request.systemInstruction).toEqual({
-            parts: [{ text: "You are a helpful assistant" }]
+            parts: [{text: "You are a helpful assistant"}]
         });
     });
 
@@ -124,7 +124,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
                         parameters: {
                             type: "object",
                             properties: {
-                                location: { type: "string" }
+                                location: {type: "string"}
                             },
                             required: ["location"]
                         }
@@ -150,7 +150,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
         expect(functionDeclaration?.parameters).toEqual({
             type: "object",
             properties: {
-                location: { type: "string" }
+                location: {type: "string"}
             },
             required: ["location"]
         });
@@ -166,7 +166,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
                     function: {
                         name: "test_tool",
                         description: "Test tool",
-                        parameters: { type: "object" }
+                        parameters: {type: "object"}
                     }
                 }
             ],
@@ -198,7 +198,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
                     function: {
                         name: "test_tool",
                         description: "Test tool",
-                        parameters: { type: "object" }
+                        parameters: {type: "object"}
                     }
                 }
             ],
@@ -225,7 +225,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
             model: "gemini-2.5-pro",
             tool_choice: {
                 type: "function",
-                function: { name: "specific_tool" }
+                function: {name: "specific_tool"}
             },
             tools: [
                 {
@@ -233,7 +233,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
                     function: {
                         name: "specific_tool",
                         description: "Specific tool",
-                        parameters: { type: "object" }
+                        parameters: {type: "object"}
                     }
                 }
             ],
@@ -322,7 +322,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
         expect(result.request.contents[0].parts).toHaveLength(2);
-        expect(result.request.contents[0].parts[0]).toEqual({ text: "Hello\n" });
+        expect(result.request.contents[0].parts[0]).toEqual({text: "Hello\n"});
         expect(result.request.contents[0].parts[1]).toEqual({
             inlineData: {
                 mimeType: "image/png",
@@ -349,7 +349,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
 
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
-        expect(result.request.contents[0].parts).toEqual([{ text: "Hello world\n" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "Hello world\n"}]);
     });
 
     it("should not add extra newline to text content that already ends with newline", () => {
@@ -370,7 +370,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
 
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
-        expect(result.request.contents[0].parts).toEqual([{ text: "Hello world\n" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "Hello world\n"}]);
     });
 
     it("should handle empty text content by adding newline", () => {
@@ -391,7 +391,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
 
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
-        expect(result.request.contents[0].parts).toEqual([{ text: "\n" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "\n"}]);
     });
 
     it("should handle multiple text contents with newline logic", () => {
@@ -421,9 +421,9 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
         expect(result.request.contents[0].parts).toEqual([
-            { text: "First text\n" },
-            { text: "Second text\n" },
-            { text: "Third text\n" }
+            {text: "First text\n"},
+            {text: "Second text\n"},
+            {text: "Third text\n"}
         ]);
     });
 
@@ -441,7 +441,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
         expect(result.request.contents[0].role).toBe("model");
-        expect(result.request.contents[0].parts).toEqual([{ text: "Hello from assistant" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "Hello from assistant"}]);
     });
 
     it("should map assistant message with tool calls", () => {
@@ -470,12 +470,14 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
 
         expect(result.request.contents[0].role).toBe("model");
         expect(result.request.contents[0].parts).toHaveLength(2);
-        expect(result.request.contents[0].parts[0]).toEqual({ text: "I'll check the weather for you." });
+        expect(result.request.contents[0].parts[0]).toEqual({text: "I'll check the weather for you."});
         expect(result.request.contents[0].parts[1]).toEqual({
             functionCall: {
                 name: "get_weather",
-                args: { location: "New York" }
-            }
+                args: {location: "New York"}
+            },
+            thoughtSignature: "skip_thought_signature_validator",
+            thought_signature: "skip_thought_signature_validator"
         });
     });
 
@@ -547,7 +549,7 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
 
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
-        expect(result.request.contents[0].parts).toEqual([{ text: "123" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "123"}]);
     });
 });
 
@@ -564,7 +566,7 @@ describe("OpenAI tool conversion functions", () => {
                         parameters: {
                             type: "object",
                             properties: {
-                                name: { type: "string" }
+                                name: {type: "string"}
                             }
                         }
                     }
@@ -587,7 +589,7 @@ describe("OpenAI tool conversion functions", () => {
             parameters: {
                 type: "object",
                 properties: {
-                    name: { type: "string" }
+                    name: {type: "string"}
                 }
             }
         });
@@ -672,7 +674,7 @@ describe("OpenAI message mapping functions", () => {
                 },
                 {
                     role: "tool",
-                    content: { data: "complex object" } as unknown as string,
+                    content: {data: "complex object"} as unknown as string,
                     tool_call_id: "call_123"
                 }
             ]
@@ -719,8 +721,10 @@ describe("OpenAI message mapping functions", () => {
         expect(result.request.contents[0].parts[0]).toEqual({
             functionCall: {
                 name: "calculate",
-                args: { expression: "2+2" }
-            }
+                args: {expression: "2+2"}
+            },
+            thoughtSignature: "skip_thought_signature_validator",
+            thought_signature: "skip_thought_signature_validator"
         });
     });
 
@@ -750,7 +754,7 @@ describe("OpenAI message mapping functions", () => {
 
         // Should only include the text part, invalid image should be skipped
         expect(result.request.contents[0].parts).toHaveLength(1);
-        expect(result.request.contents[0].parts[0]).toEqual({ text: "Look at this image:\n" });
+        expect(result.request.contents[0].parts[0]).toEqual({text: "Look at this image:\n"});
     });
 
     it("should handle text content with undefined text", () => {
@@ -771,7 +775,7 @@ describe("OpenAI message mapping functions", () => {
 
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
-        expect(result.request.contents[0].parts).toEqual([{ text: "\n" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "\n"}]);
     });
 
     it("should handle multiple tool calls in assistant message", () => {
@@ -809,18 +813,22 @@ describe("OpenAI message mapping functions", () => {
 
         expect(result.request.contents[0].role).toBe("model");
         expect(result.request.contents[0].parts).toHaveLength(3);
-        expect(result.request.contents[0].parts[0]).toEqual({ text: "I'll call multiple functions for you." });
+        expect(result.request.contents[0].parts[0]).toEqual({text: "I'll call multiple functions for you."});
         expect(result.request.contents[0].parts[1]).toEqual({
             functionCall: {
                 name: "function_1",
-                args: { param1: "value1" }
-            }
+                args: {param1: "value1"}
+            },
+            thoughtSignature: "skip_thought_signature_validator",
+            thought_signature: "skip_thought_signature_validator"
         });
         expect(result.request.contents[0].parts[2]).toEqual({
             functionCall: {
                 name: "function_2",
-                args: { param2: "value2" }
-            }
+                args: {param2: "value2"}
+            },
+            thoughtSignature: "skip_thought_signature_validator",
+            thought_signature: "skip_thought_signature_validator"
         });
     });
 
@@ -853,14 +861,14 @@ describe("OpenAI message mapping functions", () => {
         const result = mapOpenAIChatCompletionRequestToGemini("test-project", request);
 
         expect(result.request.contents[0].parts).toHaveLength(3);
-        expect(result.request.contents[0].parts[0]).toEqual({ text: "First text\n" });
+        expect(result.request.contents[0].parts[0]).toEqual({text: "First text\n"});
         expect(result.request.contents[0].parts[1]).toEqual({
             inlineData: {
                 mimeType: "image/jpeg",
                 data: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
             }
         });
-        expect(result.request.contents[0].parts[2]).toEqual({ text: "Second text\n" });
+        expect(result.request.contents[0].parts[2]).toEqual({text: "Second text\n"});
     });
 });
 

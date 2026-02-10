@@ -30,7 +30,7 @@ export type FunctionDeclaration = {
     parameters: object;
 };
 
-export type ToolChoice = "none" | "auto" | { type: "function"; function: { name: string } };
+export type ToolChoice = "none" | "auto" | {type: "function"; function: {name: string}};
 
 export type ToolCall = {
     index: number;
@@ -40,6 +40,7 @@ export type ToolCall = {
         name: string;
         arguments: string;
     };
+    _thoughtSignature?: string;
 };
 
 export type ChatMessage = {
@@ -92,6 +93,10 @@ export type StreamDelta = {
     tool_calls?: ToolCall[];
     native_tool_calls?: NativeToolResponse[];
     grounding?: unknown;
+    _thought?: boolean;
+    _thinkingStart?: boolean;
+    _thinkingEnd?: boolean;
+    _thoughtSignature?: string;
 };
 
 export type NativeToolResponse = {

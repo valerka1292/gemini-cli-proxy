@@ -1,4 +1,4 @@
-import { ChalkInstance } from "chalk";
+import {ChalkInstance} from "chalk";
 
 export type Logger = {
     info: (msg: string, ...optionalParams: unknown[]) => void;

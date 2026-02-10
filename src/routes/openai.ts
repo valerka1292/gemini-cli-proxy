@@ -1,12 +1,12 @@
 import express from "express";
-import { GeminiApiClient } from "../gemini/client.js";
+import {GeminiApiClient} from "../gemini/client.js";
 import * as Gemini from "../types/gemini.js";
 import * as OpenAI from "../types/openai.js";
 import * as Responses from "../types/responses.js";
-import { mapOpenAIChatCompletionRequestToGemini } from "../gemini/openai-mapper.js";
-import { mapResponsesRequestToChatCompletion, buildResponseObject } from "../gemini/responses-mapper.js";
-import { getLogger } from "../utils/logger.js";
-import { cacheToolSignature, cacheThinkingSignature } from "../utils/signature-cache.js";
+import {mapOpenAIChatCompletionRequestToGemini} from "../gemini/openai-mapper.js";
+import {mapResponsesRequestToChatCompletion, buildResponseObject} from "../gemini/responses-mapper.js";
+import {getLogger} from "../utils/logger.js";
+import {cacheToolSignature, cacheThinkingSignature} from "../utils/signature-cache.js";
 import chalk from "chalk";
 
 
@@ -20,7 +20,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
         try {
             const body = req.body as Responses.ResponsesRequest;
             if (!body.input) {
-                return res.status(400).json({ error: "input is a required field" });
+                return res.status(400).json({error: "input is a required field"});
             }
 
             const chatCompletionRequest = mapResponsesRequestToChatCompletion(body);
@@ -53,8 +53,8 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                     error: null,
                 };
 
-                sendEvent({ type: "response.created", response: { ...shellResponse, status: "in_progress" } });
-                sendEvent({ type: "response.in_progress", response: { ...shellResponse, status: "in_progress" } });
+                sendEvent({type: "response.created", response: {...shellResponse, status: "in_progress"}});
+                sendEvent({type: "response.in_progress", response: {...shellResponse, status: "in_progress"}});
 
                 // State tracking
                 let messageItemEmitted = false;
@@ -78,13 +78,13 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                         if (!delta) continue;
 
                         // Cache thinking signatures for later re-attachment to function call parts
-                        const thoughtSig = (delta as any)._thoughtSignature;
+                        const thoughtSig = delta._thoughtSignature;
                         if (thoughtSig && thoughtSig.length >= 100) {
                             cacheThinkingSignature(thoughtSig, "gemini");
                         }
 
                         // Handle text content (skip thinking content — it's internal to Gemini)
-                        if (delta.content && !(delta as any)._thought) {
+                        if (delta.content && !delta._thought) {
                             if (!messageItemEmitted) {
                                 messageItemId = `msg_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
                                 const msgItem: Responses.ResponseOutputMessage = {
@@ -103,7 +103,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                                     type: "response.content_part.added",
                                     output_index: outputIndex,
                                     content_index: 0,
-                                    part: { type: "output_text", text: "", annotations: [] },
+                                    part: {type: "output_text", text: "", annotations: []},
                                 });
                                 messageItemEmitted = true;
                             }
@@ -135,7 +135,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                                             type: "response.content_part.done",
                                             output_index: 0,
                                             content_index: 0,
-                                            part: { type: "output_text", text: accumulatedText, annotations: [] },
+                                            part: {type: "output_text", text: accumulatedText, annotations: []},
                                         });
                                         sendEvent({
                                             type: "response.output_item.done",
@@ -145,7 +145,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                                                 id: messageItemId,
                                                 status: "completed",
                                                 role: "assistant",
-                                                content: [{ type: "output_text", text: accumulatedText, annotations: [] }],
+                                                content: [{type: "output_text", text: accumulatedText, annotations: []}],
                                             },
                                         });
                                         outputIndex++;
@@ -194,7 +194,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                                     tracked.name = tc.function.name;
                                 }
                                 // Cache thought signature for this tool call (required by Gemini thinking models)
-                                const thoughtSig = (tc as any)._thoughtSignature;
+                                const thoughtSig = tc._thoughtSignature;
                                 if (thoughtSig && tracked.callId) {
                                     cacheToolSignature(tracked.callId, thoughtSig);
                                 }
@@ -216,7 +216,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                             type: "response.content_part.done",
                             output_index: 0,
                             content_index: 0,
-                            part: { type: "output_text", text: accumulatedText, annotations: [] },
+                            part: {type: "output_text", text: accumulatedText, annotations: []},
                         });
                         sendEvent({
                             type: "response.output_item.done",
@@ -226,7 +226,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                                 id: messageItemId,
                                 status: "completed",
                                 role: "assistant",
-                                content: [{ type: "output_text", text: accumulatedText, annotations: [] }],
+                                content: [{type: "output_text", text: accumulatedText, annotations: []}],
                             },
                         });
                     }
@@ -260,7 +260,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                             id: messageItemId,
                             status: "completed",
                             role: "assistant",
-                            content: [{ type: "output_text", text: accumulatedText, annotations: [] }],
+                            content: [{type: "output_text", text: accumulatedText, annotations: []}],
                         });
                     }
                     for (const [, tracked] of toolCallItems) {
@@ -284,14 +284,14 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                         error: null,
                     };
 
-                    sendEvent({ type: "response.completed", response: completedResponse });
+                    sendEvent({type: "response.completed", response: completedResponse});
                     res.end();
 
                 } catch (streamError) {
                     logger.error("responses stream error", streamError);
                     if (!res.headersSent) {
                         const errorMessage = streamError instanceof Error ? streamError.message : "Unknown stream error";
-                        res.status(500).json({ error: errorMessage });
+                        res.status(500).json({error: errorMessage});
                     } else {
                         res.end();
                     }
@@ -306,7 +306,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                 } catch (completionError: unknown) {
                     const errorMessage = completionError instanceof Error ? completionError.message : String(completionError);
                     logger.error("responses completion error", completionError);
-                    res.status(500).json({ error: errorMessage });
+                    res.status(500).json({error: errorMessage});
                 }
             }
 
@@ -314,7 +314,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
             logger.error("responses error", error);
             if (!res.headersSent) {
-                res.status(500).json({ error: errorMessage });
+                res.status(500).json({error: errorMessage});
             } else {
                 res.end();
             }
@@ -341,7 +341,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
         try {
             const body = req.body as OpenAI.ChatCompletionRequest;
             if (!body.messages.length) {
-                return res.status(400).json({ error: "messages is a required field" });
+                return res.status(400).json({error: "messages is a required field"});
             }
             const projectId = await geminiClient.discoverProjectId();
             const geminiCompletionRequest = mapOpenAIChatCompletionRequestToGemini(projectId, body);
@@ -353,7 +353,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                 res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
                 res.setHeader("Access-Control-Allow-Origin", "*");
 
-                const { readable, writable } = new TransformStream();
+                const {readable, writable} = new TransformStream();
                 const writer = writable.getWriter();
                 const reader = readable.getReader();
 
@@ -365,7 +365,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                             const delta = chunk.choices?.[0]?.delta;
                             if (delta?.tool_calls) {
                                 for (const tc of delta.tool_calls) {
-                                    const sig = (tc as any)._thoughtSignature;
+                                    const sig = tc._thoughtSignature;
                                     if (sig && tc.id) {
                                         cacheToolSignature(tc.id, sig);
                                     }
@@ -382,7 +382,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                 })();
 
                 while (true) {
-                    const { done, value } = await reader.read();
+                    const {done, value} = await reader.read();
                     if (done) {
                         res.write("data: [DONE]\n\n");
                         res.end();
@@ -426,7 +426,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                 } catch (completionError: unknown) {
                     const errorMessage = completionError instanceof Error ? completionError.message : String(completionError);
                     logger.error("completion error", completionError);
-                    res.status(500).json({ error: errorMessage });
+                    res.status(500).json({error: errorMessage});
                 }
             }
         } catch (error) {
@@ -434,7 +434,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
             logger.error("completion error", error);
 
             if (!res.headersSent) {
-                res.status(500).json({ error: errorMessage });
+                res.status(500).json({error: errorMessage});
             } else {
                 res.end();
             }

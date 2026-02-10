@@ -38,7 +38,7 @@ export type Tool = {
     input_schema: object;
 };
 
-export type ToolChoice = "auto" | "any" | { type: "tool"; name: string };
+export type ToolChoice = "auto" | "any" | {type: "tool"; name: string};
 
 export type ToolUse = {
     type: "tool_use";
@@ -99,7 +99,7 @@ export type StreamEvent = {
 
 export type MessageStartEvent = StreamEvent & {
     type: "message_start";
-    message: Omit<MessagesResponse, "content"> & { content: [] };
+    message: Omit<MessagesResponse, "content"> & {content: []};
 };
 
 export type ContentBlockStartEvent = StreamEvent & {
