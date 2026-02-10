@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { mapAnthropicMessagesRequestToGemini, mapGeminiResponseToAnthropic } from "./anthropic-mapper.js";
+import {describe, it, expect} from "vitest";
+import {mapAnthropicMessagesRequestToGemini, mapGeminiResponseToAnthropic} from "./anthropic-mapper.js";
 import * as Anthropic from "../types/anthropic.js";
 import * as Gemini from "../types/gemini.js";
 
@@ -22,7 +22,7 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
         expect(result.project).toBe("test-project");
         expect(result.request.contents).toHaveLength(1);
         expect(result.request.contents[0].role).toBe("user");
-        expect(result.request.contents[0].parts).toEqual([{ text: "Hello world" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "Hello world"}]);
     });
 
     it("should map request with temperature", () => {
@@ -65,7 +65,7 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
 
         expect(result.request.systemInstruction).toBeDefined();
         expect(result.request.systemInstruction?.parts).toEqual([
-            { text: "You are a helpful assistant" }
+            {text: "You are a helpful assistant"}
         ]);
     });
 
@@ -80,7 +80,7 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                     input_schema: {
                         type: "object",
                         properties: {
-                            location: { type: "string" },
+                            location: {type: "string"},
                             options: {
                                 type: ["string", "null"]
                             }
@@ -109,7 +109,7 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
         expect(functionDeclaration?.parameters).toEqual({
             type: "object",
             properties: {
-                location: { type: "string" },
+                location: {type: "string"},
                 options: {
                     type: "string",
                     nullable: true
@@ -130,7 +130,7 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                 {
                     name: "test_tool",
                     description: "Test tool",
-                    input_schema: { type: "object" }
+                    input_schema: {type: "object"}
                 }
             ],
             messages: [
@@ -159,7 +159,7 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                 {
                     name: "test_tool",
                     description: "Test tool",
-                    input_schema: { type: "object" }
+                    input_schema: {type: "object"}
                 }
             ],
             messages: [
@@ -191,7 +191,7 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
                 {
                     name: "specific_tool",
                     description: "Specific tool",
-                    input_schema: { type: "object" }
+                    input_schema: {type: "object"}
                 }
             ],
             messages: [
@@ -240,7 +240,7 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
         const result = mapAnthropicMessagesRequestToGemini("test-project", request);
 
         expect(result.request.contents[0].parts).toHaveLength(2);
-        expect(result.request.contents[0].parts[0]).toEqual({ text: "Hello\n" });
+        expect(result.request.contents[0].parts[0]).toEqual({text: "Hello\n"});
         expect(result.request.contents[0].parts[1]).toEqual({
             inlineData: {
                 mimeType: "image/png",
@@ -268,7 +268,7 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
 
         const result = mapAnthropicMessagesRequestToGemini("test-project", request);
 
-        expect(result.request.contents[0].parts).toEqual([{ text: "Hello world\n" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "Hello world\n"}]);
     });
 
     it("should not add extra newline to text content that already ends with newline", () => {
@@ -290,7 +290,7 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
 
         const result = mapAnthropicMessagesRequestToGemini("test-project", request);
 
-        expect(result.request.contents[0].parts).toEqual([{ text: "Hello world\n" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "Hello world\n"}]);
     });
 
     it("should handle empty text content by adding newline", () => {
@@ -312,7 +312,7 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
 
         const result = mapAnthropicMessagesRequestToGemini("test-project", request);
 
-        expect(result.request.contents[0].parts).toEqual([{ text: "\n" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "\n"}]);
     });
 
     it("should handle multiple text contents with newline logic", () => {
@@ -343,9 +343,9 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
         const result = mapAnthropicMessagesRequestToGemini("test-project", request);
 
         expect(result.request.contents[0].parts).toEqual([
-            { text: "First text\n" },
-            { text: "Second text\n" },
-            { text: "Third text\n" }
+            {text: "First text\n"},
+            {text: "Second text\n"},
+            {text: "Third text\n"}
         ]);
     });
 
@@ -381,14 +381,14 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
         const result = mapAnthropicMessagesRequestToGemini("test-project", request);
 
         expect(result.request.contents[0].parts).toEqual([
-            { text: "Look at this image\n" },
+            {text: "Look at this image\n"},
             {
                 inlineData: {
                     mimeType: "image/jpeg",
                     data: "test-image-data"
                 }
             },
-            { text: "What do you see?\n" }
+            {text: "What do you see?\n"}
         ]);
     });
 
@@ -407,19 +407,19 @@ describe("mapAnthropicMessagesRequestToGemini", () => {
         const result = mapAnthropicMessagesRequestToGemini("test-project", request);
 
         expect(result.request.contents[0].role).toBe("model");
-        expect(result.request.contents[0].parts).toEqual([{ text: "Hello from assistant" }]);
+        expect(result.request.contents[0].parts).toEqual([{text: "Hello from assistant"}]);
     });
 
     it("should handle invalid tool_choice with fallback to auto", () => {
         const request: Anthropic.MessagesRequest = {
             model: "claude-3-5-sonnet-20241022",
             max_tokens: 1000,
-            tool_choice: { type: "invalid" } as unknown as Anthropic.ToolChoice,
+            tool_choice: {type: "invalid"} as unknown as Anthropic.ToolChoice,
             tools: [
                 {
                     name: "test_tool",
                     description: "Test tool",
-                    input_schema: { type: "object" }
+                    input_schema: {type: "object"}
                 }
             ],
             messages: [
@@ -501,7 +501,7 @@ describe("mapGeminiResponseToAnthropic", () => {
             type: "tool_use",
             id: "tool_call_123",
             name: "get_weather",
-            input: { location: "New York" }
+            input: {location: "New York"}
         });
     });
 
@@ -538,14 +538,14 @@ describe("mapGeminiResponseToAnthropic", () => {
             type: "tool_use",
             id: "tool_call_456",
             name: "calculate",
-            input: { expression: "2 + 2" }
+            input: {expression: "2 + 2"}
         });
 
         expect(result.content[1]).toEqual({
             type: "tool_use",
             id: "tool_call_789",
             name: "search",
-            input: { query: "artificial intelligence" }
+            input: {query: "artificial intelligence"}
         });
     });
 
