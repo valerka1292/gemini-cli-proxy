@@ -2,6 +2,9 @@ import * as OpenAI from "../types/openai.js";
 import * as Gemini from "../types/gemini.js";
 import { DEFAULT_TEMPERATURE } from "../utils/constant.js";
 import { mapModelToGemini, mapJsonSchemaToGemini } from "./mapper.js";
+import { getCachedToolSignature, getCachedThinkingSignature } from "../utils/signature-cache.js";
+
+const SYNTHETIC_THOUGHT_SIGNATURE = 'skip_thought_signature_validator';
 
 export const mapOpenAIChatCompletionRequestToGemini = (
     project: string,
@@ -131,12 +134,21 @@ const mapOpenAIMessageToGeminiFormat = (msg: OpenAI.ChatMessage, prevMsg?: OpenA
 
         for (const toolCall of msg.tool_calls) {
             if (toolCall.type === "function") {
-                parts.push({
+                const fcPart: Gemini.Part = {
                     functionCall: {
                         name: toolCall.function.name,
                         args: JSON.parse(toolCall.function.arguments)
                     }
-                });
+                };
+                // Re-attach cached thought_signature for Gemini thinking models
+                // If not in cache, use synthetic signature to pass validation
+                const cachedSig = getCachedToolSignature(toolCall.id) || getCachedThinkingSignature("gemini");
+                const signatureToUse = cachedSig || SYNTHETIC_THOUGHT_SIGNATURE;
+
+                (fcPart as any).thought_signature = signatureToUse;
+                (fcPart as any).thoughtSignature = signatureToUse;
+
+                parts.push(fcPart);
             }
         }
 
@@ -231,4 +243,3 @@ const convertOpenAIFunctionToGemini = (fn: OpenAI.FunctionDeclaration): Gemini.F
         parameters: convertedParameters
     };
 };
-
