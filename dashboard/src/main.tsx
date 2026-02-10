@@ -33,26 +33,15 @@ function UsageChart({points}: {points: UsageSummary["byDay"]}) {
     const height = 230;
     const step = points.length > 1 ? width / (points.length - 1) : width;
 
-    const line = points
-        .map((point, index) => {
-            const x = index * step;
-            const y = height - (point.requests / max) * (height - 18);
-            return `${x},${y}`;
-        })
-        .join(" ");
-
-    const bars = points.map((point, index) => {
-        const x = index * step - 4;
-        const barHeight = (point.requests / max) * (height - 18);
-        const y = height - barHeight;
-        return <rect key={`${point.day}-bar`} x={x} y={y} width="8" height={barHeight} fill="rgba(87, 96, 255, .35)" rx="2" />;
-    });
-
     return (
         <div className="chart-wrap">
             <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="chart">
-                {bars}
-                <polyline points={line} fill="none" stroke="#8b5cf6" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                {points.map((point, index) => {
+                    const x = index * step - 4;
+                    const barHeight = (point.requests / max) * (height - 18);
+                    const y = height - barHeight;
+                    return <rect key={`${point.day}-bar`} className="bar-hover" x={x} y={y} width="8" height={barHeight} fill="rgba(16,163,127,0.45)" rx="2" />;
+                })}
             </svg>
             <div className="chart-footer">
                 <span>{points[0]?.day}</span>
@@ -65,7 +54,7 @@ function UsageChart({points}: {points: UsageSummary["byDay"]}) {
 function App() {
     const [token, setToken] = useState<string>(() => localStorage.getItem(tokenKey) ?? "");
     const [user, setUser] = useState<User | null>(null);
-    const [activeSection, setActiveSection] = useState<Section>("keys");
+    const [activeSection, setActiveSection] = useState<Section>("usage");
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -179,16 +168,14 @@ function App() {
             <div className="auth-wrap">
                 <div className="auth-panel">
                     <div className="auth-header">
-                        <div className="dot" />
                         <h1>OpenGemini Dashboard</h1>
                     </div>
-                    <p className="sub">Secure admin control panel</p>
                     <label>Email</label>
                     <input placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
                     <label>Password</label>
                     <input placeholder="••••••••" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
                     <div className="actions">
-                        <button onClick={login}>Sign in</button>
+                        <button className="primary" onClick={login}>Sign in</button>
                         <button className="secondary" onClick={register}>Create account</button>
                     </div>
                     {otpMessage && <div className="otp">{otpMessage}</div>}
@@ -200,76 +187,131 @@ function App() {
     return (
         <div className="page">
             <aside className="sidebar">
-                <div className="logo">OG</div>
-                <div className="side-title">OpenGemini Dashboard</div>
-                <div className="menu">
-                    <button className={`menu-item ${activeSection === "keys" ? "active" : ""}`} onClick={() => setActiveSection("keys")}>API keys</button>
-                    <button className={`menu-item ${activeSection === "models" ? "active" : ""}`} onClick={() => setActiveSection("models")}>Models</button>
-                    <button className={`menu-item ${activeSection === "usage" ? "active" : ""}`} onClick={() => setActiveSection("usage")}>Usage</button>
+                <div className="logo">
+                    <div className="logo-icon">P</div>
+                    Personal
                 </div>
-                <button className="secondary" onClick={() => { localStorage.removeItem(tokenKey); setToken(""); }}>Log out</button>
-            </aside>
-            <main className="content">
-                <header className="topbar">
-                    <h2>OpenGemini Dashboard</h2>
-                    <div>{user.email}</div>
-                </header>
 
+                <div className="menu-section">Manage</div>
+                <button className={`menu-item ${activeSection === "usage" ? "active" : ""}`} onClick={() => setActiveSection("usage")}>
+                    📊 Usage
+                </button>
+                <button className={`menu-item ${activeSection === "keys" ? "active" : ""}`} onClick={() => setActiveSection("keys")}>
+                    🔑 API keys
+                </button>
+
+                <div className="menu-section">Configuration</div>
+                <button className={`menu-item ${activeSection === "models" ? "active" : ""}`} onClick={() => setActiveSection("models")}>
+                    🤖 Models
+                </button>
+
+                <div style={{marginTop: "auto"}}>
+                    <button className="menu-item" onClick={() => { localStorage.removeItem(tokenKey); setToken(""); }}>Log out</button>
+                </div>
+            </aside>
+
+            <main className="content">
                 {activeSection === "keys" && (
-                    <section className="card">
+                    <section>
                         <div className="row-between">
-                            <h3>API keys</h3>
-                            <button onClick={createKey}>+ Create new secret key</button>
+                            <div><h2>API keys</h2></div>
+                            <button className="primary" onClick={createKey}>+ Create new secret key</button>
                         </div>
-                        {createdKey && <div className="banner">Save this key now: <code>{createdKey}</code></div>}
+                        <p className="description">
+                            Your secret API keys are listed below. Please note that we do not display your secret keys again after you generate them.
+                            Do not share your API key with others.
+                        </p>
+
+                        {createdKey && (
+                            <div className="banner" style={{marginBottom: 20, background: "#10261e", border: "1px solid #10a37f", color: "#fff"}}>
+                                <strong>Save this key:</strong> <code style={{color: "#fff", background: "transparent"}}>{createdKey}</code>
+                            </div>
+                        )}
+
                         <table>
-                            <thead><tr><th>NAME</th><th>STATUS</th><th>SECRET KEY</th><th>CREATED</th><th>LAST USED</th><th></th></tr></thead>
+                            <thead>
+                                <tr>
+                                    <th style={{width: "25%"}}>NAME</th>
+                                    <th style={{width: "15%"}}>STATUS</th>
+                                    <th style={{width: "30%"}}>SECRET KEY</th>
+                                    <th style={{width: "15%"}}>CREATED</th>
+                                    <th style={{width: "15%"}}>LAST USED</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
                             <tbody>
-                            {apiKeys.map((k) => <tr key={k.id}><td>{k.name}</td><td>{k.isActive ? "Active" : "Disabled"}</td><td>{k.maskedKey}</td><td>{new Date(k.createdAt).toLocaleDateString()}</td><td>{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : "Never"}</td><td><button className="danger" onClick={() => deleteKey(k.id)}>Delete</button></td></tr>)}
+                                {apiKeys.map((k) => (
+                                    <tr key={k.id}>
+                                        <td>{k.name}</td>
+                                        <td><span className={`badge ${k.isActive ? "active" : "inactive"}`}>{k.isActive ? "Active" : "Disabled"}</span></td>
+                                        <td className="masked-key">{k.maskedKey}</td>
+                                        <td>{new Date(k.createdAt).toLocaleDateString()}</td>
+                                        <td>{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : "Never"}</td>
+                                        <td style={{textAlign: "right"}}><button className="danger" onClick={() => deleteKey(k.id)}>Revoke</button></td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </section>
                 )}
 
-                {activeSection === "models" && (
-                    <section className="card">
-                        <h3>Models policy</h3>
-                        <div className="models-grid">
-                            {models.map((m) => <label key={m.id} className="model-item"><span>{m.id}</span><input type="checkbox" checked={m.enabled} onChange={(e) => toggleModel(m.id, e.target.checked)} /></label>)}
+                {activeSection === "usage" && usage && (
+                    <section>
+                        <div className="topbar"><h2>Usage</h2></div>
+
+                        <div className="stats-header">
+                            <div className="stat-box"><span>Requests</span><strong>{formatNumber(usage.totalRequests)}</strong></div>
+                            <div className="stat-box"><span>Tokens Generated</span><strong>{formatNumber(usage.totalOutputTokens)}</strong></div>
+                        </div>
+
+                        <div className="card">
+                            <h3>Activity</h3>
+                            <div className="chart-container"><UsageChart points={usage.byDay} /></div>
+                        </div>
+
+                        <div className="row-between" style={{alignItems: "flex-start", gap: 40}}>
+                            <div style={{flex: 1}}>
+                                <h3>By Model</h3>
+                                <table>
+                                    <thead><tr><th>Model</th><th style={{textAlign: "right"}}>Requests</th></tr></thead>
+                                    <tbody>
+                                        {usage.byModel.filter((m) => m.requests > 0).map((m) => (
+                                            <tr key={m.model}><td>{m.model}</td><td style={{textAlign: "right"}}>{m.requests}</td></tr>
+                                        ))}
+                                        {usage.byModel.every((m) => m.requests === 0) && <tr><td colSpan={2} style={{color: "#666", textAlign: "center"}}>No data</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div style={{flex: 1}}>
+                                <h3>By API Key</h3>
+                                <table>
+                                    <thead><tr><th>Key Name</th><th style={{textAlign: "right"}}>Usage</th></tr></thead>
+                                    <tbody>
+                                        {usage.byApiKey.map((k) => (
+                                            <tr key={k.id}><td>{k.name}</td><td style={{textAlign: "right"}}>{k.requests} reqs</td></tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </section>
                 )}
 
-                {activeSection === "usage" && usage && (
-                    <>
-                        <section className="card stats-grid">
-                            <div className="stat"><span>Total requests</span><strong>{formatNumber(usage.totalRequests)}</strong></div>
-                            <div className="stat"><span>Input tokens</span><strong>{formatNumber(usage.totalInputTokens)}</strong></div>
-                            <div className="stat"><span>Output tokens</span><strong>{formatNumber(usage.totalOutputTokens)}</strong></div>
-                        </section>
-
-                        <section className="card">
-                            <h3>Usage over time</h3>
-                            <UsageChart points={usage.byDay} />
-                        </section>
-
-                        <section className="card split">
-                            <div>
-                                <h3>By API key</h3>
-                                <table>
-                                    <thead><tr><th>KEY</th><th>REQUESTS</th><th>INPUT</th><th>OUTPUT</th></tr></thead>
-                                    <tbody>{usage.byApiKey.map((k) => <tr key={k.id}><td>{k.name}</td><td>{k.requests}</td><td>{k.inputTokens}</td><td>{k.outputTokens}</td></tr>)}</tbody>
-                                </table>
-                            </div>
-                            <div>
-                                <h3>By endpoint</h3>
-                                <table>
-                                    <thead><tr><th>ENDPOINT</th><th>REQUESTS</th></tr></thead>
-                                    <tbody>{usage.byEndpoint.map((e) => <tr key={e.endpoint}><td>{e.endpoint}</td><td>{e.requests}</td></tr>)}</tbody>
-                                </table>
-                            </div>
-                        </section>
-                    </>
+                {activeSection === "models" && (
+                    <section>
+                        <div className="topbar">
+                            <h2>Model Configuration</h2>
+                            <div className="topbar-sub">Enable or disable specific Gemini models for this proxy.</div>
+                        </div>
+                        <div className="models-grid">
+                            {models.map((m) => (
+                                <label key={m.id} className="model-item">
+                                    <span>{m.id}</span>
+                                    <input type="checkbox" checked={m.enabled} onChange={(e) => toggleModel(m.id, e.target.checked)} />
+                                </label>
+                            ))}
+                        </div>
+                    </section>
                 )}
             </main>
         </div>
