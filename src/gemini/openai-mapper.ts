@@ -2,6 +2,9 @@ import * as OpenAI from "../types/openai.js";
 import * as Gemini from "../types/gemini.js";
 import {DEFAULT_TEMPERATURE} from "../utils/constant.js";
 import {mapModelToGemini, mapJsonSchemaToGemini} from "./mapper.js";
+import {getCachedThinkingSignature, getCachedToolSignature} from "../utils/signature-cache.js";
+
+const SYNTHETIC_THOUGHT_SIGNATURE = "skip_thought_signature_validator";
 export const mapOpenAIChatCompletionRequestToGemini = (
     project: string,
     request: OpenAI.ChatCompletionRequest,
@@ -136,8 +139,14 @@ const mapOpenAIMessageToGeminiFormat = (msg: OpenAI.ChatMessage, prevMsg?: OpenA
                         args: JSON.parse(toolCall.function.arguments)
                     }
                 };
-                // Keep tool call payload OpenAI-compatible for history mapping.
-                // Native thought signatures are attached during streaming handling.
+                // Re-attach cached thought signature for function-call history.
+                // If cache is empty, synthetic value bypasses validator per Gemini guidance.
+                const cachedSig = getCachedToolSignature(toolCall.id) ?? getCachedThinkingSignature("gemini");
+                const signatureToUse = cachedSig ?? SYNTHETIC_THOUGHT_SIGNATURE;
+
+                fcPart.thoughtSignature = signatureToUse;
+                fcPart.thought_signature = signatureToUse;
+
                 parts.push(fcPart);
             }
         }

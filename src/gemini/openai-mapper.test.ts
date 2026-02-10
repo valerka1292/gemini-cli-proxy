@@ -475,7 +475,9 @@ describe("mapOpenAIChatCompletionRequestToGemini", () => {
             functionCall: {
                 name: "get_weather",
                 args: {location: "New York"}
-            }
+            },
+            thoughtSignature: "skip_thought_signature_validator",
+            thought_signature: "skip_thought_signature_validator"
         });
     });
 
@@ -720,7 +722,9 @@ describe("OpenAI message mapping functions", () => {
             functionCall: {
                 name: "calculate",
                 args: {expression: "2+2"}
-            }
+            },
+            thoughtSignature: "skip_thought_signature_validator",
+            thought_signature: "skip_thought_signature_validator"
         });
     });
 
@@ -814,13 +818,17 @@ describe("OpenAI message mapping functions", () => {
             functionCall: {
                 name: "function_1",
                 args: {param1: "value1"}
-            }
+            },
+            thoughtSignature: "skip_thought_signature_validator",
+            thought_signature: "skip_thought_signature_validator"
         });
         expect(result.request.contents[0].parts[2]).toEqual({
             functionCall: {
                 name: "function_2",
                 args: {param2: "value2"}
-            }
+            },
+            thoughtSignature: "skip_thought_signature_validator",
+            thought_signature: "skip_thought_signature_validator"
         });
     });
 
