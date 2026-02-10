@@ -16,6 +16,7 @@ type UsageSummary = {
 };
 
 type Section = "keys" | "models" | "usage";
+type UsageGrouping = "endpoint" | "model" | "apiKey" | "day";
 type NoticeTone = "info" | "success" | "error";
 type Notice = {title: string; message: string; tone?: NoticeTone};
 
@@ -124,6 +125,7 @@ function App() {
     const [isKeyModalOpen, setKeyModalOpen] = useState(false);
     const [newKeyName, setNewKeyName] = useState("");
     const [keyToDelete, setKeyToDelete] = useState<ApiKey | null>(null);
+    const [usageGrouping, setUsageGrouping] = useState<UsageGrouping>("endpoint");
 
     const authHeaders = useMemo(() => ({Authorization: `Bearer ${token}`, "Content-Type": "application/json"}), [token]);
 
@@ -380,26 +382,63 @@ function App() {
                                 <h3>Activity</h3>
                                 <UsageChart points={usage.byDay} />
                             </div>
-                            <div className="two-columns">
-                                <div className="panel">
-                                    <h3>By model</h3>
-                                    <table>
-                                        <thead><tr><th>Model</th><th className="align-right">Requests</th></tr></thead>
-                                        <tbody>
-                                            {usage.byModel.filter((m) => m.requests > 0).map((m) => (
-                                                <tr key={m.model}><td>{m.model}</td><td className="align-right">{m.requests}</td></tr>
-                                            ))}
-                                            {usage.byModel.every((m) => m.requests === 0) && <tr><td colSpan={2} className="empty-cell">No data</td></tr>}
-                                        </tbody>
-                                    </table>
+                            <div className="panel">
+                                <div className="usage-switcher" role="tablist" aria-label="Usage grouping">
+                                    <button className={`usage-switch ${usageGrouping === "endpoint" ? "active" : ""}`} onClick={() => setUsageGrouping("endpoint")}>By endpoint</button>
+                                    <button className={`usage-switch ${usageGrouping === "model" ? "active" : ""}`} onClick={() => setUsageGrouping("model")}>By model</button>
+                                    <button className={`usage-switch ${usageGrouping === "apiKey" ? "active" : ""}`} onClick={() => setUsageGrouping("apiKey")}>By API key</button>
+                                    <button className={`usage-switch ${usageGrouping === "day" ? "active" : ""}`} onClick={() => setUsageGrouping("day")}>By day</button>
                                 </div>
-                                <div className="panel">
-                                    <h3>By API key</h3>
-                                    <table>
-                                        <thead><tr><th>Key name</th><th className="align-right">Usage</th></tr></thead>
-                                        <tbody>{usage.byApiKey.map((k) => <tr key={k.id}><td>{k.name}</td><td className="align-right">{k.requests} reqs</td></tr>)}</tbody>
-                                    </table>
-                                </div>
+
+                                <table>
+                                    {usageGrouping === "endpoint" && (
+                                        <>
+                                            <thead><tr><th>Endpoint</th><th className="align-right">Requests</th></tr></thead>
+                                            <tbody>
+                                                {usage.byEndpoint.slice().sort((a, b) => b.requests - a.requests).map((entry) => (
+                                                    <tr key={entry.endpoint}><td>{entry.endpoint}</td><td className="align-right">{entry.requests}</td></tr>
+                                                ))}
+                                                {!usage.byEndpoint.length && <tr><td colSpan={2} className="empty-cell">No data</td></tr>}
+                                            </tbody>
+                                        </>
+                                    )}
+
+                                    {usageGrouping === "model" && (
+                                        <>
+                                            <thead><tr><th>Model</th><th className="align-right">Requests</th></tr></thead>
+                                            <tbody>
+                                                {usage.byModel.filter((m) => m.requests > 0).sort((a, b) => b.requests - a.requests).map((m) => (
+                                                    <tr key={m.model}><td>{m.model}</td><td className="align-right">{m.requests}</td></tr>
+                                                ))}
+                                                {usage.byModel.every((m) => m.requests === 0) && <tr><td colSpan={2} className="empty-cell">No data</td></tr>}
+                                            </tbody>
+                                        </>
+                                    )}
+
+                                    {usageGrouping === "apiKey" && (
+                                        <>
+                                            <thead><tr><th>Key name</th><th className="align-right">Requests</th></tr></thead>
+                                            <tbody>
+                                                {usage.byApiKey.slice().sort((a, b) => b.requests - a.requests).map((k) => (
+                                                    <tr key={k.id}><td>{k.name}</td><td className="align-right">{k.requests}</td></tr>
+                                                ))}
+                                                {!usage.byApiKey.length && <tr><td colSpan={2} className="empty-cell">No data</td></tr>}
+                                            </tbody>
+                                        </>
+                                    )}
+
+                                    {usageGrouping === "day" && (
+                                        <>
+                                            <thead><tr><th>Day</th><th className="align-right">Requests</th></tr></thead>
+                                            <tbody>
+                                                {usage.byDay.slice().sort((a, b) => b.requests - a.requests).map((entry) => (
+                                                    <tr key={entry.day}><td>{entry.day}</td><td className="align-right">{entry.requests}</td></tr>
+                                                ))}
+                                                {!usage.byDay.length && <tr><td colSpan={2} className="empty-cell">No data</td></tr>}
+                                            </tbody>
+                                        </>
+                                    )}
+                                </table>
                             </div>
                         </section>
                     )}
@@ -412,7 +451,10 @@ function App() {
                                 {models.map((m) => (
                                     <label key={m.id} className="model-item">
                                         <span>{m.id}</span>
-                                        <input type="checkbox" checked={m.enabled} onChange={(e) => toggleModel(m.id, e.target.checked)} />
+                                        <span className="switch">
+                                            <input type="checkbox" checked={m.enabled} onChange={(e) => toggleModel(m.id, e.target.checked)} />
+                                            <span className="switch-track" aria-hidden="true" />
+                                        </span>
                                     </label>
                                 ))}
                             </div>

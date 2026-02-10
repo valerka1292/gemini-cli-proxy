@@ -1,4 +1,7 @@
 import {OAuth2Client} from "google-auth-library";
+import {mkdir, readFile, writeFile} from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import * as readline from "node:readline";
 import * as OpenAI from "../types/openai.js";
 import * as Gemini from "../types/gemini.js";
@@ -29,6 +32,69 @@ type ReadableLike = {
 };
 
 const isReadableLike = (value: unknown): value is ReadableLike => typeof value === "object" && value !== null && "on" in value && typeof (value as {on?: unknown}).on === "function";
+
+
+const GEMINI_CLI_PACKAGE_URL = "https://raw.githubusercontent.com/google-gemini/gemini-cli/refs/heads/main/package.json";
+const FALLBACK_GEMINI_CLI_VERSION = "unknown";
+const PROXY_INSTALLATION_ID_PATH = path.join(os.homedir(), ".gemini-cli-proxy", "installation_id");
+
+let geminiCliVersionPromise: Promise<string> | null = null;
+let installationIdPromise: Promise<string> | null = null;
+
+async function resolveGeminiCliVersion(logger: Logger): Promise<string> {
+    if (!geminiCliVersionPromise) {
+        geminiCliVersionPromise = (async () => {
+            try {
+                const response = await fetch(GEMINI_CLI_PACKAGE_URL);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch package.json: ${response.status}`);
+                }
+
+                const packageJson = (await response.json()) as {version?: unknown};
+                if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
+                    throw new Error("Remote package.json does not contain a valid version field");
+                }
+
+                return packageJson.version;
+            } catch (error: unknown) {
+                logger.warn(`Failed to resolve remote Gemini CLI version, using fallback '${FALLBACK_GEMINI_CLI_VERSION}'.`, error);
+                return FALLBACK_GEMINI_CLI_VERSION;
+            }
+        })();
+    }
+
+    return geminiCliVersionPromise;
+}
+
+async function resolveInstallationId(logger: Logger): Promise<string> {
+    if (!installationIdPromise) {
+        installationIdPromise = (async () => {
+            try {
+                const existingValue = (await readFile(PROXY_INSTALLATION_ID_PATH, "utf8")).trim();
+                if (existingValue) {
+                    return existingValue;
+                }
+            } catch (error: unknown) {
+                const fsError = error as NodeJS.ErrnoException;
+                if (fsError.code !== "ENOENT") {
+                    logger.warn("Failed to read installation_id file, generating a new value.", error);
+                }
+            }
+
+            const generatedId = crypto.randomUUID();
+            try {
+                await mkdir(path.dirname(PROXY_INSTALLATION_ID_PATH), {recursive: true});
+                await writeFile(PROXY_INSTALLATION_ID_PATH, generatedId, "utf8");
+            } catch (error) {
+                logger.warn("Failed to persist installation_id file, using generated value for this session.", error);
+            }
+
+            return generatedId;
+        })();
+    }
+
+    return installationIdPromise;
+}
 
 export class GeminiApiClient {
     private projectId: string | null = null;
@@ -346,11 +412,13 @@ export class GeminiApiClient {
         try {
             // Using authClient.request() exactly like gemini-cli's CodeAssistServer.requestStreamingPost
             // See: gemini-cli/packages/core/src/code_assist/server.ts
-            const version = "0.25.0";
+            const [version, installationId] = await Promise.all([
+                resolveGeminiCliVersion(this.logger),
+                resolveInstallationId(this.logger),
+            ]);
             const userAgent = `GeminiCLI/${version}/${payload.model} (${process.platform}; ${process.arch})`;
 
             const url = `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:streamGenerateContent`;
-            const installationId = "68260397-5066-4f72-b0d2-9f92585ddd1c";
             this.logger.info(`Making request to: ${url}`);
 
             const headers: Record<string, string> = {
