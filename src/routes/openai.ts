@@ -70,6 +70,8 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                 let messageItemId = "";
                 let accumulatedText = "";
                 let outputIndex = 0;
+                let inputTokens = 0;
+                let outputTokens = 0;
 
                 // Track tool calls: key = tool call index from stream
                 const toolCallItems: Map<number, {
@@ -83,6 +85,11 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                 try {
                     const geminiStream = geminiClient.streamContent(geminiCompletionRequest);
                     for await (const chunk of geminiStream) {
+                        if (chunk.usage) {
+                            inputTokens = chunk.usage.prompt_tokens || inputTokens;
+                            outputTokens = chunk.usage.completion_tokens || outputTokens;
+                        }
+
                         const delta = chunk.choices[0]?.delta;
                         if (!delta) continue;
 
@@ -294,6 +301,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                     };
 
                     sendEvent({type: "response.completed", response: completedResponse});
+                    recordUsageFromRequest(req, 200, {inputTokens, outputTokens});
                     res.end();
 
                 } catch (streamError) {
@@ -311,10 +319,6 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                 try {
                     const completion = await geminiClient.getCompletion(geminiCompletionRequest);
                     const response = buildResponseObject(body.model, completion);
-                    recordUsageFromRequest(req, 200, {
-                        inputTokens: completion.usage?.inputTokens,
-                        outputTokens: completion.usage?.outputTokens,
-                    });
                     recordUsageFromRequest(req, 200, {
                         inputTokens: completion.usage?.inputTokens,
                         outputTokens: completion.usage?.outputTokens,
@@ -381,11 +385,18 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                 const {readable, writable} = new TransformStream();
                 const writer = writable.getWriter();
                 const reader = readable.getReader();
+                let inputTokens = 0;
+                let outputTokens = 0;
 
                 (async () => {
                     try {
                         const geminiStream = geminiClient.streamContent(geminiCompletionRequest);
                         for await (const chunk of geminiStream) {
+                            if (chunk.usage) {
+                                inputTokens = chunk.usage.prompt_tokens || inputTokens;
+                                outputTokens = chunk.usage.completion_tokens || outputTokens;
+                            }
+
                             // Cache thought signatures for tool calls (needed by thinking models in multi-turn)
                             const delta = chunk.choices?.[0]?.delta;
                             if (delta?.tool_calls) {
@@ -399,10 +410,12 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                             await writer.write(chunk);
                         }
                         await writer.close();
+                        recordUsageFromRequest(req, 200, {inputTokens, outputTokens});
                     } catch (error) {
                         logger.error("stream error", error);
                         const errorMessage = error instanceof Error ? error.message : "Unknown stream error";
                         await writer.abort(errorMessage);
+                        recordUsageFromRequest(req, 500);
                     }
                 })();
 
@@ -447,6 +460,10 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                         };
                     }
 
+                    recordUsageFromRequest(req, 200, {
+                        inputTokens: completion.usage?.inputTokens,
+                        outputTokens: completion.usage?.outputTokens,
+                    });
                     res.json(response);
                 } catch (completionError: unknown) {
                     const errorMessage = completionError instanceof Error ? completionError.message : String(completionError);

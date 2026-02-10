@@ -121,7 +121,8 @@ export function createAnthropicRouter(geminiClient: GeminiApiClient): express.Ro
 
                 try {
                     logger.info(`[TIMING] Starting Gemini stream call (${Date.now() - requestStartTime}ms since request start)`);
-                    await streamAnthropicResponse(res, geminiClient, geminiRequest, body.model, requestId, logger, requestStartTime);
+                    const usage = await streamAnthropicResponse(res, geminiClient, geminiRequest, body.model, requestId, logger, requestStartTime);
+                    recordUsageFromRequest(req, 200, usage);
                 } catch (error) {
                     logger.error("streaming error", error);
                     if (!res.headersSent) {
@@ -176,6 +177,10 @@ export function createAnthropicRouter(geminiClient: GeminiApiClient): express.Ro
                         }
                     }
 
+                    recordUsageFromRequest(req, 200, {
+                        inputTokens: completion.usage?.inputTokens,
+                        outputTokens: completion.usage?.outputTokens,
+                    });
                     res.json(response);
                 } catch (completionError: unknown) {
                     const errorMessage = completionError instanceof Error
@@ -197,6 +202,7 @@ export function createAnthropicRouter(geminiClient: GeminiApiClient): express.Ro
                         }
                     };
 
+                    recordUsageFromRequest(req, statusCode);
                     res.status(statusCode).json(error);
                 }
             }
@@ -239,7 +245,7 @@ async function streamAnthropicResponse(
     messageId: string,
     logger: ReturnType<typeof getLogger>,
     requestStartTime: number
-): Promise<void> {
+): Promise<{inputTokens: number; outputTokens: number}> {
     const streamFunctionStartTime = Date.now();
     logger.info(`[TIMING] streamAnthropicResponse started (${streamFunctionStartTime - requestStartTime}ms since request)`);
 
@@ -536,4 +542,6 @@ async function streamAnthropicResponse(
     logger.info(`[TIMING] Stream completed | Total: ${totalDuration}ms | Tokens: in=${inputTokens}, out=${outputTokens}`);
 
     res.end();
+
+    return {inputTokens, outputTokens};
 }
