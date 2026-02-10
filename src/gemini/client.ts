@@ -35,7 +35,7 @@ const isReadableLike = (value: unknown): value is ReadableLike => typeof value =
 
 
 const GEMINI_CLI_PACKAGE_URL = "https://raw.githubusercontent.com/google-gemini/gemini-cli/refs/heads/main/package.json";
-const FALLBACK_GEMINI_CLI_VERSION = "unknown";
+const FALLBACK_GEMINI_CLI_VERSION = "0.27.3";
 const PROXY_INSTALLATION_ID_PATH = path.join(os.homedir(), ".gemini-cli-proxy", "installation_id");
 
 let geminiCliVersionPromise: Promise<string> | null = null;
