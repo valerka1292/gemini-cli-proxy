@@ -175,7 +175,7 @@ export function createDashboardRouter(): express.Router {
 
     if (fs.existsSync(dashboardDistDir)) {
         router.use(express.static(dashboardDistDir));
-        router.get("*", (_req, res) => {
+        router.get("/{*path}", (_req, res) => {
             res.sendFile(path.join(dashboardDistDir, "index.html"));
         });
     } else {
