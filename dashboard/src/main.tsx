@@ -31,6 +31,53 @@ function Icon({path, className}: {path: string; className?: string}) {
     );
 }
 
+function Dialog({
+    isOpen,
+    title,
+    children,
+    onClose,
+    onSubmit,
+    submitLabel = "OK",
+}: {
+    isOpen: boolean;
+    title: string;
+    children: React.ReactNode;
+    onClose: () => void;
+    onSubmit?: () => void;
+    submitLabel?: string;
+}) {
+    if (!isOpen) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+                <h3>{title}</h3>
+                {children}
+                <div className="modal-actions">
+                    <button className="secondary" onClick={onClose}>Cancel</button>
+                    {onSubmit && <button className="primary" onClick={onSubmit}>{submitLabel}</button>}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function AlertModal({msg, onClose}: {msg: string | null; onClose: () => void}) {
+    if (!msg) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+                <h3>Notice</h3>
+                <p>{msg}</p>
+                <div className="modal-actions">
+                    <button className="primary" onClick={onClose}>Close</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function UsageChart({points}: {points: UsageSummary["byDay"]}) {
     if (!points.length) return <div className="empty">No usage data yet.</div>;
 
@@ -71,6 +118,10 @@ function App() {
     const [models, setModels] = useState<ModelStatus[]>([]);
     const [usage, setUsage] = useState<UsageSummary | null>(null);
 
+    const [alertMsg, setAlertMsg] = useState<string | null>(null);
+    const [isKeyModalOpen, setKeyModalOpen] = useState(false);
+    const [newKeyName, setNewKeyName] = useState("");
+
     const authHeaders = useMemo(() => ({Authorization: `Bearer ${token}`, "Content-Type": "application/json"}), [token]);
 
     const clearToken = () => {
@@ -82,9 +133,9 @@ function App() {
     const copyText = async (text: string, successMessage: string) => {
         try {
             await navigator.clipboard.writeText(text);
-            alert(successMessage);
+            setAlertMsg(successMessage);
         } catch {
-            alert("Unable to copy automatically. Please copy manually.");
+            setAlertMsg("Unable to copy automatically. Please copy manually.");
         }
     };
 
@@ -129,7 +180,7 @@ function App() {
         }
 
         if (!res.ok) {
-            alert(data.error ?? "Login failed");
+            setAlertMsg(data.error ?? "Login failed");
             return;
         }
 
@@ -145,23 +196,29 @@ function App() {
         });
         const data = await res.json();
         if (!res.ok) {
-            alert(data.error ?? "Register failed");
+            setAlertMsg(data.error ?? "Register failed");
             return;
         }
         setOtpMessage(`OTP: ${data.oneTimeCode}. Press 'c' in proxy console and enter code.`);
     };
 
-    const createKey = async () => {
-        const name = prompt("API key name", "Default key");
-        if (!name) return;
+    const initiateCreateKey = () => {
+        setNewKeyName("Default key");
+        setKeyModalOpen(true);
+    };
+
+    const confirmCreateKey = async () => {
+        if (!newKeyName) return;
+
+        setKeyModalOpen(false);
         const res = await fetch("/dashboard/api/keys", {
             method: "POST",
             headers: authHeaders,
-            body: JSON.stringify({name}),
+            body: JSON.stringify({name: newKeyName}),
         });
         const data = await res.json();
         if (!res.ok) {
-            alert(data.error ?? "Unable to create key");
+            setAlertMsg(data.error ?? "Unable to create key");
             return;
         }
         setCreatedKey(data.key);
@@ -197,6 +254,8 @@ function App() {
                     </div>
                     {otpMessage && <div className="otp">{otpMessage}</div>}
                 </div>
+
+                <AlertModal msg={alertMsg} onClose={() => setAlertMsg(null)} />
             </div>
         );
     }
@@ -224,11 +283,8 @@ function App() {
                 </button>
 
                 <div className="sidebar-footer">
-                    <button className="token-action" onClick={() => copyText(token, "Auth token copied") }>
-                        <Icon className="menu-icon" path="M9 9h11v11H9zM4 15V4h11" /> Copy token
-                    </button>
                     <button className="token-action danger" onClick={clearToken}>
-                        <Icon className="menu-icon" path="M3 6h18M8 6V4h8v2m-1 0v14H9V6" /> Remove token
+                        <Icon className="menu-icon" path="M6 6l12 12M18 6L6 18" /> Log out
                     </button>
                 </div>
             </aside>
@@ -244,7 +300,7 @@ function App() {
                         <section>
                             <div className="section-header">
                                 <h2>API keys</h2>
-                                <button className="primary" onClick={createKey}><Icon className="button-icon" path="M12 5v14M5 12h14" />Create new secret key</button>
+                                <button className="primary" onClick={initiateCreateKey}><Icon className="button-icon" path="M12 5v14M5 12h14" />Create new secret key</button>
                             </div>
                             <p className="description">Manage secret keys for this project. Keep them secure and rotate regularly.</p>
 
@@ -340,6 +396,25 @@ function App() {
                     )}
                 </main>
             </div>
+
+            <Dialog
+                isOpen={isKeyModalOpen}
+                title="Create new API key"
+                onClose={() => setKeyModalOpen(false)}
+                onSubmit={confirmCreateKey}
+                submitLabel="Create"
+            >
+                <p>Enter a name for this key to easily identify it later.</p>
+                <input
+                    autoFocus
+                    placeholder="e.g. My App Key"
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && confirmCreateKey()}
+                />
+            </Dialog>
+
+            <AlertModal msg={alertMsg} onClose={() => setAlertMsg(null)} />
         </div>
     );
 }
