@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { mapResponsesRequestToChatCompletion, buildResponseObject } from "./responses-mapper.js";
+import {describe, it, expect} from "vitest";
+import {mapResponsesRequestToChatCompletion, buildResponseObject} from "./responses-mapper.js";
 import * as Responses from "../types/responses.js";
 import * as OpenAI from "../types/openai.js";
 
@@ -14,7 +14,7 @@ describe("mapResponsesRequestToChatCompletion", () => {
 
         expect(result.model).toBe("gemini-2.5-flash");
         expect(result.messages).toHaveLength(1);
-        expect(result.messages[0]).toEqual({ role: "user", content: "Hello world" });
+        expect(result.messages[0]).toEqual({role: "user", content: "Hello world"});
     });
 
     it("should prepend instructions as system message", () => {
@@ -27,17 +27,17 @@ describe("mapResponsesRequestToChatCompletion", () => {
         const result = mapResponsesRequestToChatCompletion(request);
 
         expect(result.messages).toHaveLength(2);
-        expect(result.messages[0]).toEqual({ role: "system", content: "You are a helpful assistant" });
-        expect(result.messages[1]).toEqual({ role: "user", content: "Hello" });
+        expect(result.messages[0]).toEqual({role: "system", content: "You are a helpful assistant"});
+        expect(result.messages[1]).toEqual({role: "user", content: "Hello"});
     });
 
     it("should map message input items with proper roles", () => {
         const request: Responses.ResponsesRequest = {
             model: "gemini-2.5-pro",
             input: [
-                { role: "user", content: "What is 2+2?" },
-                { role: "assistant", content: "4" },
-                { role: "user", content: "Thanks" },
+                {role: "user", content: "What is 2+2?"},
+                {role: "assistant", content: "4"},
+                {role: "user", content: "Thanks"},
             ],
         };
 
@@ -56,8 +56,8 @@ describe("mapResponsesRequestToChatCompletion", () => {
                 {
                     role: "user",
                     content: [
-                        { type: "input_text" as const, text: "Hello" },
-                        { type: "input_text" as const, text: "World" },
+                        {type: "input_text" as const, text: "Hello"},
+                        {type: "input_text" as const, text: "World"},
                     ],
                 },
             ],
@@ -68,8 +68,8 @@ describe("mapResponsesRequestToChatCompletion", () => {
         expect(result.messages).toHaveLength(1);
         const content = result.messages[0].content as OpenAI.MessageContent[];
         expect(content).toHaveLength(2);
-        expect(content[0]).toEqual({ type: "text", text: "Hello" });
-        expect(content[1]).toEqual({ type: "text", text: "World" });
+        expect(content[0]).toEqual({type: "text", text: "Hello"});
+        expect(content[1]).toEqual({type: "text", text: "World"});
     });
 
     it("should map input_image content to image_url MessageContent", () => {
@@ -79,7 +79,7 @@ describe("mapResponsesRequestToChatCompletion", () => {
                 {
                     role: "user",
                     content: [
-                        { type: "input_image" as const, image_url: "data:image/png;base64,abc123", detail: "low" as const },
+                        {type: "input_image" as const, image_url: "data:image/png;base64,abc123", detail: "low" as const},
                     ],
                 },
             ],
@@ -90,7 +90,7 @@ describe("mapResponsesRequestToChatCompletion", () => {
         const content = result.messages[0].content as OpenAI.MessageContent[];
         expect(content[0]).toEqual({
             type: "image_url",
-            image_url: { url: "data:image/png;base64,abc123", detail: "low" },
+            image_url: {url: "data:image/png;base64,abc123", detail: "low"},
         });
     });
 
@@ -103,7 +103,7 @@ describe("mapResponsesRequestToChatCompletion", () => {
                     type: "function",
                     name: "get_weather",
                     description: "Get weather info",
-                    parameters: { type: "object", properties: { location: { type: "string" } } },
+                    parameters: {type: "object", properties: {location: {type: "string"}}},
                     strict: true,
                 },
             ],
@@ -117,7 +117,7 @@ describe("mapResponsesRequestToChatCompletion", () => {
             function: {
                 name: "get_weather",
                 description: "Get weather info",
-                parameters: { type: "object", properties: { location: { type: "string" } } },
+                parameters: {type: "object", properties: {location: {type: "string"}}},
             },
         });
         // strict should NOT be present
@@ -161,18 +161,18 @@ describe("mapResponsesRequestToChatCompletion", () => {
         const request: Responses.ResponsesRequest = {
             model: "gemini-2.5-pro",
             input: "Test",
-            tool_choice: { type: "function", name: "my_tool" },
+            tool_choice: {type: "function", name: "my_tool"},
         };
 
         const result = mapResponsesRequestToChatCompletion(request);
-        expect(result.tool_choice).toEqual({ type: "function", function: { name: "my_tool" } });
+        expect(result.tool_choice).toEqual({type: "function", function: {name: "my_tool"}});
     });
 
     it("should map function_call input items to assistant message with tool_calls", () => {
         const request: Responses.ResponsesRequest = {
             model: "gemini-2.5-pro",
             input: [
-                { role: "user", content: "Get weather" },
+                {role: "user", content: "Get weather"},
                 {
                     type: "function_call" as const,
                     id: "fc_1",
@@ -185,7 +185,7 @@ describe("mapResponsesRequestToChatCompletion", () => {
                     call_id: "call_123",
                     output: "Sunny, 25°C",
                 },
-                { role: "user", content: "Thanks" },
+                {role: "user", content: "Thanks"},
             ],
         };
 
@@ -203,7 +203,7 @@ describe("mapResponsesRequestToChatCompletion", () => {
             index: 0,
             id: "call_123",
             type: "function",
-            function: { name: "get_weather", arguments: "{\"location\": \"Paris\"}" },
+            function: {name: "get_weather", arguments: "{\"location\": \"Paris\"}"},
         });
 
         // tool response
@@ -219,7 +219,7 @@ describe("mapResponsesRequestToChatCompletion", () => {
         const request: Responses.ResponsesRequest = {
             model: "gemini-2.5-pro",
             input: [
-                { role: "user", content: "Run two tools" },
+                {role: "user", content: "Run two tools"},
                 {
                     type: "function_call" as const,
                     id: "fc_1",
@@ -248,11 +248,11 @@ describe("mapResponsesRequestToChatCompletion", () => {
         const request: Responses.ResponsesRequest = {
             model: "gemini-2.5-pro",
             input: "Think hard",
-            reasoning: { effort: "high" },
+            reasoning: {effort: "high"},
         };
 
         const result = mapResponsesRequestToChatCompletion(request);
-        expect(result.reasoning).toEqual({ effort: "high" });
+        expect(result.reasoning).toEqual({effort: "high"});
     });
 
     it("should pass through temperature", () => {
@@ -270,13 +270,13 @@ describe("mapResponsesRequestToChatCompletion", () => {
         const request: Responses.ResponsesRequest = {
             model: "gemini-2.5-pro",
             input: [
-                { type: "message" as const, role: "user", content: "Hello with explicit type" },
+                {type: "message" as const, role: "user", content: "Hello with explicit type"},
             ],
         };
 
         const result = mapResponsesRequestToChatCompletion(request);
         expect(result.messages).toHaveLength(1);
-        expect(result.messages[0]).toEqual({ role: "user", content: "Hello with explicit type" });
+        expect(result.messages[0]).toEqual({role: "user", content: "Hello with explicit type"});
     });
 
     it("should handle empty input array", () => {
@@ -294,7 +294,7 @@ describe("mapResponsesRequestToChatCompletion", () => {
             model: "gemini-2.5-pro",
             input: "Test",
             tools: [
-                { type: "function", name: "simple_tool" },
+                {type: "function", name: "simple_tool"},
             ],
         };
 
@@ -304,7 +304,7 @@ describe("mapResponsesRequestToChatCompletion", () => {
             function: {
                 name: "simple_tool",
                 description: "",
-                parameters: { type: "object" },
+                parameters: {type: "object"},
             },
         });
     });
@@ -314,7 +314,7 @@ describe("buildResponseObject", () => {
     it("should build response with text content", () => {
         const completion = {
             content: "Hello!",
-            usage: { inputTokens: 10, outputTokens: 5 },
+            usage: {inputTokens: 10, outputTokens: 5},
         };
 
         const result = buildResponseObject("gemini-2.5-flash", completion);
@@ -346,7 +346,7 @@ describe("buildResponseObject", () => {
                     index: 0,
                     id: "call_abc",
                     type: "function" as const,
-                    function: { name: "get_weather", arguments: "{\"location\":\"Paris\"}" },
+                    function: {name: "get_weather", arguments: "{\"location\":\"Paris\"}"},
                 },
             ],
         };
@@ -372,7 +372,7 @@ describe("buildResponseObject", () => {
                     index: 0,
                     id: "call_xyz",
                     type: "function" as const,
-                    function: { name: "get_weather", arguments: "{}" },
+                    function: {name: "get_weather", arguments: "{}"},
                 },
             ],
         };
@@ -385,7 +385,7 @@ describe("buildResponseObject", () => {
     });
 
     it("should handle missing usage", () => {
-        const completion = { content: "Hello" };
+        const completion = {content: "Hello"};
 
         const result = buildResponseObject("gemini-2.5-flash", completion);
 
@@ -393,7 +393,7 @@ describe("buildResponseObject", () => {
     });
 
     it("should generate valid IDs", () => {
-        const completion = { content: "test" };
+        const completion = {content: "test"};
         const result = buildResponseObject("gemini-2.5-flash", completion);
 
         expect(result.id).toMatch(/^resp_/);

@@ -19,7 +19,7 @@ export type ResponsesRequest = {
     };
 };
 
-export type ResponseToolChoice = "none" | "auto" | "required" | { type: "function"; name: string };
+export type ResponseToolChoice = "none" | "auto" | "required" | {type: "function"; name: string};
 
 export type ResponseTool = {
     type: "function";
@@ -125,14 +125,14 @@ export type ResponseOutputFunctionCall = {
 // ─── Streaming event types ───
 
 export type ResponseStreamEvent =
-    | { type: "response.created"; response: ResponseObject }
-    | { type: "response.in_progress"; response: ResponseObject }
-    | { type: "response.completed"; response: ResponseObject }
-    | { type: "response.output_item.added"; output_index: number; item: ResponseOutputItem }
-    | { type: "response.output_item.done"; output_index: number; item: ResponseOutputItem }
-    | { type: "response.content_part.added"; output_index: number; content_index: number; part: ResponseOutputContent }
-    | { type: "response.content_part.done"; output_index: number; content_index: number; part: ResponseOutputContent }
-    | { type: "response.output_text.delta"; output_index: number; content_index: number; delta: string }
-    | { type: "response.output_text.done"; output_index: number; content_index: number; text: string }
-    | { type: "response.function_call_arguments.delta"; output_index: number; delta: string }
-    | { type: "response.function_call_arguments.done"; output_index: number; arguments: string };
+    | {type: "response.created"; response: ResponseObject}
+    | {type: "response.in_progress"; response: ResponseObject}
+    | {type: "response.completed"; response: ResponseObject}
+    | {type: "response.output_item.added"; output_index: number; item: ResponseOutputItem}
+    | {type: "response.output_item.done"; output_index: number; item: ResponseOutputItem}
+    | {type: "response.content_part.added"; output_index: number; content_index: number; part: ResponseOutputContent}
+    | {type: "response.content_part.done"; output_index: number; content_index: number; part: ResponseOutputContent}
+    | {type: "response.output_text.delta"; output_index: number; content_index: number; delta: string}
+    | {type: "response.output_text.done"; output_index: number; content_index: number; text: string}
+    | {type: "response.function_call_arguments.delta"; output_index: number; delta: string}
+    | {type: "response.function_call_arguments.done"; output_index: number; arguments: string};

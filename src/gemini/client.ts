@@ -1,10 +1,10 @@
-import { OAuth2Client } from "google-auth-library";
+import {OAuth2Client} from "google-auth-library";
 import * as readline from "node:readline";
 import * as OpenAI from "../types/openai.js";
 import * as Gemini from "../types/gemini.js";
-import { CODE_ASSIST_API_VERSION, CODE_ASSIST_ENDPOINT, CODE_ASSIST_ENDPOINT_FALLBACKS, OPENAI_CHAT_COMPLETION_OBJECT, MAX_RETRIES } from "../utils/constant.js";
-import { AutoModelSwitchingHelper, type RetryableRequestData } from "./auto-model-switching.js";
-import { getLogger, Logger } from "../utils/logger.js";
+import {CODE_ASSIST_API_VERSION, CODE_ASSIST_ENDPOINT, OPENAI_CHAT_COMPLETION_OBJECT} from "../utils/constant.js";
+import {AutoModelSwitchingHelper, type RetryableRequestData} from "./auto-model-switching.js";
+import {getLogger, Logger} from "../utils/logger.js";
 import chalk from "chalk";
 
 /**
@@ -24,6 +24,12 @@ export class GeminiApiError extends Error {
 /**
  * Handles communication with Google's Gemini API through the Code Assist endpoint.
  */
+type ReadableLike = {
+    on: (event: string, listener: (...args: unknown[]) => void) => void;
+};
+
+const isReadableLike = (value: unknown): value is ReadableLike => typeof value === "object" && value !== null && "on" in value && typeof (value as {on?: unknown}).on === "function";
+
 export class GeminiApiClient {
     private projectId: string | null = null;
     private firstChunk: boolean = true;
@@ -56,7 +62,7 @@ export class GeminiApiClient {
         }
 
         // Check environment variables first (like gemini-cli)
-        const envProject = process.env['GOOGLE_CLOUD_PROJECT'] || process.env['GOOGLE_CLOUD_PROJECT_ID'];
+        const envProject = process.env["GOOGLE_CLOUD_PROJECT"] || process.env["GOOGLE_CLOUD_PROJECT_ID"];
         if (envProject) {
             this.projectId = envProject;
             return envProject;
@@ -67,9 +73,9 @@ export class GeminiApiClient {
             const loadResponse = (await this.callEndpoint("loadCodeAssist", {
                 cloudaicompanionProject: undefined,
                 metadata: {
-                    ideType: 'IDE_UNSPECIFIED',
-                    platform: 'PLATFORM_UNSPECIFIED',
-                    pluginType: 'GEMINI',
+                    ideType: "IDE_UNSPECIFIED",
+                    platform: "PLATFORM_UNSPECIFIED",
+                    pluginType: "GEMINI",
                     duetProject: undefined
                 },
             })) as Gemini.ProjectDiscoveryResponse;
@@ -88,9 +94,9 @@ export class GeminiApiClient {
                 tierId,
                 cloudaicompanionProject: undefined,
                 metadata: {
-                    ideType: 'IDE_UNSPECIFIED',
-                    platform: 'PLATFORM_UNSPECIFIED',
-                    pluginType: 'GEMINI'
+                    ideType: "IDE_UNSPECIFIED",
+                    platform: "PLATFORM_UNSPECIFIED",
+                    pluginType: "GEMINI"
                 }
             };
 
@@ -126,7 +132,7 @@ export class GeminiApiClient {
     }
 
     private async callEndpoint(method: string, body: Record<string, unknown>): Promise<unknown> {
-        const { token } = await this.authClient.getAccessToken();
+        const {token} = await this.authClient.getAccessToken();
         const response = await fetch(`${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:${method}`,
             {
                 method: "POST",
@@ -174,7 +180,7 @@ export class GeminiApiClient {
 
             let content = "";
             const tool_calls: OpenAI.ToolCall[] = [];
-            let usage: { inputTokens: number; outputTokens: number } | undefined;
+            let usage: {inputTokens: number; outputTokens: number} | undefined;
 
             for (const chunk of chunks) {
                 if (chunk.choices[0].delta.content) {
@@ -210,7 +216,7 @@ export class GeminiApiClient {
                     error.statusCode,
                     geminiCompletionRequest,
                     async (model: string, data: RetryableRequestData) => {
-                        const updatedRequest = { ...data, model } as Gemini.ChatCompletionRequest;
+                        const updatedRequest = {...data, model} as Gemini.ChatCompletionRequest;
                         return await this.getCompletion(updatedRequest, isRetry);
                     }
                 ) as Promise<{
@@ -249,7 +255,7 @@ export class GeminiApiClient {
                     error.statusCode,
                     geminiCompletionRequest,
                     async function* (model: string, data: RetryableRequestData) {
-                        const updatedRequest = { ...data, model } as Gemini.ChatCompletionRequest;
+                        const updatedRequest = {...data, model} as Gemini.ChatCompletionRequest;
                         // Create new client instance to reset firstChunk state
                         const fallbackClient = new GeminiApiClient(
                             self.authClient,
@@ -283,8 +289,8 @@ export class GeminiApiClient {
         };
 
         // Inject session_id if missing (gemini-cli uses this.sessionId)
-        if (payload.request && !(payload.request as any).session_id) {
-            (payload.request as any).session_id = this.chatID;
+        if (payload.request && !payload.request.session_id) {
+            payload.request.session_id = this.chatID;
         }
 
         try {
@@ -295,9 +301,6 @@ export class GeminiApiClient {
 
             const url = `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:streamGenerateContent`;
             const installationId = "68260397-5066-4f72-b0d2-9f92585ddd1c";
-            const quotaProjectId = payload.project || this.googleCloudProject || "nifty-iridium-3vpmb";
-
-
             this.logger.info(`Making request to: ${url}`);
 
             const headers: Record<string, string> = {
@@ -377,12 +380,12 @@ export class GeminiApiClient {
                                 if ("text" in part) {
                                     // Handle text content
                                     // Check for thinking content
-                                    const isThinking = (part as any).thought === true;
+                                    const isThinking = part.thought === true;
 
                                     if (isThinking) {
                                         // Handle thinking content from Gemini - pass through native format
                                         const thinkingText = part.text;
-                                        const signature = (part as any).thought_signature || (part as any).thoughtSignature || "";
+                                        const signature = part.thought_signature || part.thoughtSignature || "";
                                         if (signature) {
                                             this.logger.debug(`Captured thought signature: ${signature.substring(0, 10)}...`);
                                         }
@@ -393,7 +396,7 @@ export class GeminiApiClient {
                                             // Custom fields for native Gemini format pass-through
                                             _thought: true,
                                             _thoughtSignature: signature,
-                                        } as any;
+                                        };
 
                                         if (this.firstChunk) {
                                             delta.role = "assistant";
@@ -401,7 +404,7 @@ export class GeminiApiClient {
                                         }
 
                                         if (!thinkingInProgress) {
-                                            (delta as any)._thinkingStart = true;
+                                            delta._thinkingStart = true;
                                             thinkingInProgress = true;
                                         }
 
@@ -413,12 +416,12 @@ export class GeminiApiClient {
                                             const closingDelta: OpenAI.StreamDelta = {
                                                 content: "",
                                                 _thinkingEnd: true,
-                                            } as any;
+                                            };
                                             yield this.createOpenAIChunk(closingDelta, geminiCompletionRequest.model);
                                             thinkingInProgress = false;
                                         }
 
-                                        const delta: OpenAI.StreamDelta = { content: part.text };
+                                        const delta: OpenAI.StreamDelta = {content: part.text};
                                         if (this.firstChunk) {
                                             delta.role = "assistant";
                                             this.firstChunk = false;
@@ -433,13 +436,13 @@ export class GeminiApiClient {
                                         const closingDelta: OpenAI.StreamDelta = {
                                             content: "",
                                             _thinkingEnd: true,
-                                        } as any;
+                                        };
                                         yield this.createOpenAIChunk(closingDelta, geminiCompletionRequest.model);
                                         thinkingInProgress = false;
                                     }
 
                                     // Get thoughtSignature from the part if available
-                                    const partSignature = (part as any).thought_signature || (part as any).thoughtSignature || "";
+                                    const partSignature = part.thought_signature || part.thoughtSignature || "";
 
                                     toolCallId = `call_${crypto.randomUUID()}`;
                                     const delta: OpenAI.StreamDelta = {
@@ -453,7 +456,7 @@ export class GeminiApiClient {
                                             },
                                             // Pass through signature for tool calls
                                             _thoughtSignature: partSignature,
-                                        } as any]
+                                        }]
                                     };
 
                                     if (this.firstChunk) {
@@ -501,7 +504,7 @@ export class GeminiApiClient {
                 const closingDelta: OpenAI.StreamDelta = {
                     content: "",
                     _thinkingEnd: true,
-                } as any;
+                };
                 yield this.createOpenAIChunk(closingDelta, geminiCompletionRequest.model);
             }
 
@@ -515,9 +518,18 @@ export class GeminiApiClient {
 
             yield finalChunk;
 
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const err = error as {
+                message?: string;
+                response?: {
+                    status?: number;
+                    headers?: Record<string, string>;
+                    data?: unknown;
+                };
+            };
+
             // Handle 401 retry
-            if (error?.response?.status === 401 && !isRetry) {
+            if (err.response?.status === 401 && !isRetry) {
                 this.logger.info("Got 401 error, forcing token refresh and retrying...");
                 this.authClient.credentials.access_token = undefined;
                 yield* this.streamContentInternal(geminiCompletionRequest, true);
@@ -525,11 +537,11 @@ export class GeminiApiClient {
             }
 
             // Handle 429 rate limit errors specifically
-            if (error?.response?.status === 429) {
+            if (err.response?.status === 429) {
                 this.logger.warn("Rate limited (429). Parsing reset time...");
 
                 // Try to get retry-after from headers
-                const retryAfter = error.response.headers?.['retry-after'];
+                const retryAfter = err.response.headers?.["retry-after"];
                 let resetMs = 60000; // Default 1 minute
 
                 if (retryAfter) {
@@ -542,19 +554,19 @@ export class GeminiApiClient {
                 // Try to extract reset time from error body
                 let errorBody = "";
                 try {
-                    const errorData = error.response.data;
+                    const errorData = err.response?.data;
                     if (errorData) {
-                        if (typeof errorData.on === 'function') {
+                        if (isReadableLike(errorData)) {
                             // Stream
                             const chunks: Buffer[] = [];
                             await new Promise<void>((resolve) => {
-                                errorData.on('data', (d: any) => chunks.push(Buffer.from(d)));
-                                errorData.on('end', () => resolve());
-                                errorData.on('error', () => resolve());
+                                errorData.on("data", (d) => chunks.push(Buffer.from(d as Buffer | string)));
+                                errorData.on("end", () => resolve());
+                                errorData.on("error", () => resolve());
                                 setTimeout(() => resolve(), 2000);
                             });
-                            errorBody = Buffer.concat(chunks).toString('utf-8');
-                        } else if (typeof errorData === 'string') {
+                            errorBody = Buffer.concat(chunks).toString("utf-8");
+                        } else if (typeof errorData === "string") {
                             errorBody = errorData;
                         }
                     }
@@ -565,9 +577,9 @@ export class GeminiApiClient {
                 if (resetMatch) {
                     const value = parseInt(resetMatch[1], 10);
                     const unit = resetMatch[2].toLowerCase();
-                    if (unit.startsWith('minute')) {
+                    if (unit.startsWith("minute")) {
                         resetMs = value * 60 * 1000;
-                    } else if (unit.startsWith('hour')) {
+                    } else if (unit.startsWith("hour")) {
                         resetMs = value * 60 * 60 * 1000;
                     } else {
                         resetMs = value * 1000;
@@ -585,30 +597,30 @@ export class GeminiApiClient {
             }
 
             // Extract error message for other errors
-            let errorMessage = `Stream request failed: ${error?.message || error}`;
-            const statusCode = error?.response?.status || 500;
+            let errorMessage = `Stream request failed: ${err.message || String(error)}`;
+            const statusCode = err.response?.status || 500;
 
             // Try to read error body from streaming response
-            if (error?.response) {
+            if (err.response) {
                 try {
-                    const errorData = error.response.data;
+                    const errorData = err.response?.data;
                     if (errorData) {
-                        if (typeof errorData.on === 'function') {
+                        if (isReadableLike(errorData)) {
                             // It's a stream
                             const chunks: Buffer[] = [];
                             try {
                                 const collected = await new Promise<Buffer[]>((resolve, reject) => {
                                     const c: Buffer[] = [];
-                                    errorData.on('data', (d: any) => c.push(Buffer.from(d)));
-                                    errorData.on('end', () => resolve(c));
-                                    errorData.on('error', reject);
+                                    errorData.on("data", (d) => c.push(Buffer.from(d as Buffer | string)));
+                                    errorData.on("end", () => resolve(c));
+                                    errorData.on("error", reject);
                                     setTimeout(() => resolve(c), 2000);
                                 });
                                 chunks.push(...collected);
                             } catch { /* ignore */ }
 
                             if (chunks.length > 0) {
-                                const errorBody = Buffer.concat(chunks).toString('utf-8');
+                                const errorBody = Buffer.concat(chunks).toString("utf-8");
                                 try {
                                     const parsed = JSON.parse(errorBody);
                                     if (parsed.error) {
@@ -617,8 +629,9 @@ export class GeminiApiClient {
                                 } catch { /* ignore */ }
                             }
                         } else {
-                            if (errorData.error) {
-                                errorMessage = `API Error ${errorData.error.code} (${errorData.error.status}): ${errorData.error.message}`;
+                            const dataObj = errorData as {error?: {code?: string | number; status?: string; message?: string}};
+                            if (dataObj.error) {
+                                errorMessage = `API Error ${dataObj.error.code} (${dataObj.error.status}): ${dataObj.error.message}`;
                             }
                         }
                     }
@@ -626,7 +639,7 @@ export class GeminiApiClient {
             }
 
             this.logger.error("Error in streamContentInternal", error);
-            const responseText = errorMessage.includes("API Error") ? errorMessage : (error?.response?.data ? JSON.stringify(error.response.data) : undefined);
+            const responseText = errorMessage.includes("API Error") ? errorMessage : (err.response?.data ? JSON.stringify(err.response.data) : undefined);
             throw new GeminiApiError(errorMessage, statusCode, responseText);
         }
     }

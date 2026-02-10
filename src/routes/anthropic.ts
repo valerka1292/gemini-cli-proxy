@@ -1,9 +1,9 @@
 import express from "express";
-import { GeminiApiClient, GeminiApiError } from "../gemini/client.js";
+import {GeminiApiClient, GeminiApiError} from "../gemini/client.js";
 import * as Anthropic from "../types/anthropic.js";
-import { mapAnthropicMessagesRequestToGemini, mapGeminiResponseToAnthropic } from "../gemini/anthropic-mapper.js";
+import {mapAnthropicMessagesRequestToGemini, mapGeminiResponseToAnthropic} from "../gemini/anthropic-mapper.js";
 import * as Gemini from "../types/gemini.js";
-import { getLogger } from "../utils/logger.js";
+import {getLogger} from "../utils/logger.js";
 import chalk from "chalk";
 import crypto from "crypto";
 import * as fs from "node:fs";
@@ -12,7 +12,6 @@ import {
     cacheToolSignature,
     getModelFamily,
     isValidSignature,
-    MIN_SIGNATURE_LENGTH,
 } from "../utils/signature-cache.js";
 
 export function createAnthropicRouter(geminiClient: GeminiApiClient): express.Router {
@@ -44,22 +43,26 @@ export function createAnthropicRouter(geminiClient: GeminiApiClient): express.Ro
 
             logger.info(`[TIMING] Request started at ${requestTimestamp} | Model: ${body.model} | Stream: ${body.stream}`);
 
-            // Log the raw Anthropic request to a unique file
-            try {
-                const requestsDir = "requests";
-                if (!fs.existsSync(requestsDir)) {
-                    fs.mkdirSync(requestsDir);
-                }
-                const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-                const uniqueId = crypto.randomUUID().slice(0, 8);
-                const filename = `${requestsDir}/request_${timestamp}_${uniqueId}.json`;
-                fs.writeFileSync(filename, JSON.stringify(body, null, 2));
-                logger.info(`Saved incoming Anthropic request to ${filename}`);
+            // Optional debug logging for request/response payloads.
+            // Disabled by default to avoid writing potentially sensitive prompts/tools to disk.
+            const enablePayloadDebugLogs = process.env.DEBUG_LOG_PAYLOADS === "true";
+            if (enablePayloadDebugLogs) {
+                try {
+                    const requestsDir = "requests";
+                    if (!fs.existsSync(requestsDir)) {
+                        fs.mkdirSync(requestsDir);
+                    }
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+                    const uniqueId = crypto.randomUUID().slice(0, 8);
+                    const filename = `${requestsDir}/request_${timestamp}_${uniqueId}.json`;
+                    fs.writeFileSync(filename, JSON.stringify(body, null, 2));
+                    logger.info(`Saved incoming Anthropic request to ${filename}`);
 
-                // Also write to anthropic_request.json for easy debugging
-                fs.writeFileSync("anthropic_request.json", JSON.stringify(body, null, 2));
-            } catch (err) {
-                logger.error("Failed to save anthropic request", err);
+                    // Also write to anthropic_request.json for easy debugging
+                    fs.writeFileSync("anthropic_request.json", JSON.stringify(body, null, 2));
+                } catch (err) {
+                    logger.error("Failed to save anthropic request", err);
+                }
             }
 
             // Validation
@@ -100,7 +103,6 @@ export function createAnthropicRouter(geminiClient: GeminiApiClient): express.Ro
                 res.flushHeaders();
 
                 try {
-                    const streamStartTime = Date.now();
                     logger.info(`[TIMING] Starting Gemini stream call (${Date.now() - requestStartTime}ms since request start)`);
                     await streamAnthropicResponse(res, geminiClient, geminiRequest, body.model, requestId, logger, requestStartTime);
                 } catch (error) {
@@ -128,7 +130,7 @@ export function createAnthropicRouter(geminiClient: GeminiApiClient): express.Ro
                         const errorMessage = error instanceof Error ? error.message : "Unknown stream error";
                         res.write(`event: error\ndata: ${JSON.stringify({
                             type: "error",
-                            error: { type: "api_error", message: errorMessage }
+                            error: {type: "api_error", message: errorMessage}
                         })}\n\n`);
                         res.end();
                     }
@@ -148,11 +150,12 @@ export function createAnthropicRouter(geminiClient: GeminiApiClient): express.Ro
                         requestId
                     );
 
-                    // Log the response
-                    try {
-                        fs.writeFileSync("response.json", JSON.stringify(response, null, 2));
-                    } catch (err) {
-                        logger.error("Failed to save response.json", err);
+                    if (enablePayloadDebugLogs) {
+                        try {
+                            fs.writeFileSync("response.json", JSON.stringify(response, null, 2));
+                        } catch (err) {
+                            logger.error("Failed to save response.json", err);
+                        }
                     }
 
                     res.json(response);
@@ -228,15 +231,16 @@ async function streamAnthropicResponse(
     let currentThinkingSignature = "";
     let inputTokens = 0;
     let outputTokens = 0;
-    let cacheReadTokens = 0;
+    const cacheReadTokens = 0;
     let stopReason: "end_turn" | "tool_use" | "max_tokens" | "stop_sequence" = "end_turn";
     let totalContent = "";
     const modelFamily = getModelFamily(originalModel);
 
     const writeEvent = (eventType: string, data: unknown) => {
         res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`);
-        // @ts-ignore
-        if (res.flush) res.flush();
+        if (typeof (res as express.Response & {flush?: () => void}).flush === "function") {
+            (res as express.Response & {flush?: () => void}).flush?.();
+        }
     };
 
     const geminiStream = geminiClient.streamContent(geminiRequest);
@@ -249,12 +253,11 @@ async function streamAnthropicResponse(
         }
 
         // Get delta from chunk
-        const delta = chunk.choices?.[0]?.delta as any;
+        const delta = chunk.choices?.[0]?.delta;
         if (!delta) continue;
 
         // Check for native thinking signals
         const isThinking = delta._thought === true;
-        const isThinkingStart = delta._thinkingStart === true;
         const isThinkingEnd = delta._thinkingEnd === true;
         const thoughtSignature = delta._thoughtSignature || "";
 
@@ -286,7 +289,7 @@ async function streamAnthropicResponse(
             if (currentBlockType !== "thinking") {
                 // Close previous block if any
                 if (currentBlockType !== null) {
-                    writeEvent("content_block_stop", { type: "content_block_stop", index: blockIndex });
+                    writeEvent("content_block_stop", {type: "content_block_stop", index: blockIndex});
                     blockIndex++;
                 }
                 currentBlockType = "thinking";
@@ -294,12 +297,12 @@ async function streamAnthropicResponse(
                 writeEvent("content_block_start", {
                     type: "content_block_start",
                     index: blockIndex,
-                    content_block: { type: "thinking", thinking: "" }
+                    content_block: {type: "thinking", thinking: ""}
                 });
             }
 
             // Cache signature if valid
-            if (thoughtSignature && thoughtSignature.length >= MIN_SIGNATURE_LENGTH) {
+            if (isValidSignature(thoughtSignature)) {
                 currentThinkingSignature = thoughtSignature;
                 cacheThinkingSignature(thoughtSignature, modelFamily);
             }
@@ -308,7 +311,7 @@ async function streamAnthropicResponse(
             writeEvent("content_block_delta", {
                 type: "content_block_delta",
                 index: blockIndex,
-                delta: { type: "thinking_delta", thinking: delta.content }
+                delta: {type: "thinking_delta", thinking: delta.content}
             });
         }
         // Handle thinking end signal
@@ -318,12 +321,12 @@ async function streamAnthropicResponse(
                 writeEvent("content_block_delta", {
                     type: "content_block_delta",
                     index: blockIndex,
-                    delta: { type: "signature_delta", signature: currentThinkingSignature }
+                    delta: {type: "signature_delta", signature: currentThinkingSignature}
                 });
                 currentThinkingSignature = "";
             }
             if (currentBlockType !== null) {
-                writeEvent("content_block_stop", { type: "content_block_stop", index: blockIndex });
+                writeEvent("content_block_stop", {type: "content_block_stop", index: blockIndex});
                 blockIndex++;
             }
             currentBlockType = null;
@@ -339,11 +342,11 @@ async function streamAnthropicResponse(
                     writeEvent("content_block_delta", {
                         type: "content_block_delta",
                         index: blockIndex,
-                        delta: { type: "signature_delta", signature: currentThinkingSignature }
+                        delta: {type: "signature_delta", signature: currentThinkingSignature}
                     });
                     currentThinkingSignature = "";
                 }
-                writeEvent("content_block_stop", { type: "content_block_stop", index: blockIndex });
+                writeEvent("content_block_stop", {type: "content_block_stop", index: blockIndex});
                 blockIndex++;
             }
 
@@ -353,7 +356,7 @@ async function streamAnthropicResponse(
                 writeEvent("content_block_start", {
                     type: "content_block_start",
                     index: blockIndex,
-                    content_block: { type: "text", text: "" }
+                    content_block: {type: "text", text: ""}
                 });
             }
 
@@ -361,7 +364,7 @@ async function streamAnthropicResponse(
             writeEvent("content_block_delta", {
                 type: "content_block_delta",
                 index: blockIndex,
-                delta: { type: "text_delta", text: delta.content }
+                delta: {type: "text_delta", text: delta.content}
             });
         }
 
@@ -374,22 +377,22 @@ async function streamAnthropicResponse(
                 writeEvent("content_block_delta", {
                     type: "content_block_delta",
                     index: blockIndex,
-                    delta: { type: "signature_delta", signature: currentThinkingSignature }
+                    delta: {type: "signature_delta", signature: currentThinkingSignature}
                 });
                 currentThinkingSignature = "";
             }
             if (currentBlockType !== null) {
-                writeEvent("content_block_stop", { type: "content_block_stop", index: blockIndex });
+                writeEvent("content_block_stop", {type: "content_block_stop", index: blockIndex});
                 blockIndex++;
             }
             currentBlockType = "tool_use";
 
             for (const toolCall of delta.tool_calls) {
                 const toolId = toolCall.id || `toolu_${crypto.randomBytes(12).toString("hex")}`;
-                const toolSignature = (toolCall as any)._thoughtSignature || "";
+                const toolSignature = toolCall._thoughtSignature || "";
 
                 // Build tool_use block
-                const toolUseBlock: any = {
+                const toolUseBlock: Anthropic.ToolUse & {thoughtSignature?: string} = {
                     type: "tool_use",
                     id: toolId,
                     name: toolCall.function?.name,
@@ -397,7 +400,7 @@ async function streamAnthropicResponse(
                 };
 
                 // Include signature if valid
-                if (toolSignature && toolSignature.length >= MIN_SIGNATURE_LENGTH) {
+                if (isValidSignature(toolSignature)) {
                     toolUseBlock.thoughtSignature = toolSignature;
                     cacheToolSignature(toolId, toolSignature);
                 }
@@ -420,7 +423,7 @@ async function streamAnthropicResponse(
                     });
                 }
 
-                writeEvent("content_block_stop", { type: "content_block_stop", index: blockIndex });
+                writeEvent("content_block_stop", {type: "content_block_stop", index: blockIndex});
                 blockIndex++;
             }
             currentBlockType = null;
@@ -450,20 +453,20 @@ async function streamAnthropicResponse(
                 model: originalModel,
                 stop_reason: null,
                 stop_sequence: null,
-                usage: { input_tokens: 0, output_tokens: 0 }
+                usage: {input_tokens: 0, output_tokens: 0}
             }
         });
         writeEvent("content_block_start", {
             type: "content_block_start",
             index: 0,
-            content_block: { type: "text", text: "" }
+            content_block: {type: "text", text: ""}
         });
         writeEvent("content_block_delta", {
             type: "content_block_delta",
             index: 0,
-            delta: { type: "text_delta", text: "[No response received - please try again]" }
+            delta: {type: "text_delta", text: "[No response received - please try again]"}
         });
-        writeEvent("content_block_stop", { type: "content_block_stop", index: 0 });
+        writeEvent("content_block_stop", {type: "content_block_stop", index: 0});
     } else {
         // Close any open block
         if (currentBlockType !== null) {
@@ -471,17 +474,17 @@ async function streamAnthropicResponse(
                 writeEvent("content_block_delta", {
                     type: "content_block_delta",
                     index: blockIndex,
-                    delta: { type: "signature_delta", signature: currentThinkingSignature }
+                    delta: {type: "signature_delta", signature: currentThinkingSignature}
                 });
             }
-            writeEvent("content_block_stop", { type: "content_block_stop", index: blockIndex });
+            writeEvent("content_block_stop", {type: "content_block_stop", index: blockIndex});
         }
     }
 
     // Emit message_delta with final usage
     writeEvent("message_delta", {
         type: "message_delta",
-        delta: { stop_reason: stopReason, stop_sequence: null },
+        delta: {stop_reason: stopReason, stop_sequence: null},
         usage: {
             output_tokens: outputTokens,
             cache_read_input_tokens: cacheReadTokens,
@@ -490,7 +493,7 @@ async function streamAnthropicResponse(
     });
 
     // Emit message_stop
-    writeEvent("message_stop", { type: "message_stop" });
+    writeEvent("message_stop", {type: "message_stop"});
 
     // Log the final response
     try {
@@ -498,7 +501,7 @@ async function streamAnthropicResponse(
             id: messageId,
             type: "message",
             role: "assistant",
-            content: [{ type: "text", text: totalContent }],
+            content: [{type: "text", text: totalContent}],
             model: originalModel,
             stop_reason: stopReason,
             usage: {

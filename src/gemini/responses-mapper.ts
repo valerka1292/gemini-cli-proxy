@@ -12,12 +12,12 @@ export function mapResponsesRequestToChatCompletion(
 
     // Instructions → system message
     if (request.instructions) {
-        messages.push({ role: "system", content: request.instructions });
+        messages.push({role: "system", content: request.instructions});
     }
 
     // Convert input
     if (typeof request.input === "string") {
-        messages.push({ role: "user", content: request.input });
+        messages.push({role: "user", content: request.input});
     } else if (Array.isArray(request.input)) {
         convertInputItems(request.input, messages);
     }
@@ -43,7 +43,7 @@ export function mapResponsesRequestToChatCompletion(
 
     // Reasoning
     if (request.reasoning?.effort) {
-        result.reasoning = { effort: request.reasoning.effort as OpenAI.ReasoningEffort };
+        result.reasoning = {effort: request.reasoning.effort as OpenAI.ReasoningEffort};
     }
 
     return result;
@@ -68,7 +68,7 @@ function convertInputItems(
             const msg = item as Responses.EasyInputMessage;
             const role = mapRole(msg.role);
             const content = convertMessageContent(msg.content);
-            messages.push({ role, content });
+            messages.push({role, content});
 
         } else if (isFunctionCall(item)) {
             const fc = item as Responses.ResponseFunctionToolCall;
@@ -148,7 +148,7 @@ function convertMessageContent(
 
     return content.map((c): OpenAI.MessageContent => {
         if (c.type === "input_text") {
-            return { type: "text", text: c.text };
+            return {type: "text", text: c.text};
         }
         if (c.type === "input_image") {
             return {
@@ -160,7 +160,7 @@ function convertMessageContent(
             };
         }
         // Fallback
-        return { type: "text", text: String((c as Responses.ResponseInputText).text ?? "") };
+        return {type: "text", text: String((c as Responses.ResponseInputText).text ?? "")};
     });
 }
 
@@ -172,7 +172,7 @@ function convertResponseTool(tool: Responses.ResponseTool): OpenAI.Tool {
         function: {
             name: tool.name,
             description: tool.description ?? "",
-            parameters: tool.parameters ?? { type: "object" },
+            parameters: tool.parameters ?? {type: "object"},
         },
     };
 }
@@ -181,7 +181,7 @@ function convertToolChoice(tc: Responses.ResponseToolChoice): OpenAI.ToolChoice 
     if (tc === "none") return "none";
     if (tc === "auto" || tc === "required") return "auto";
     if (typeof tc === "object" && tc.type === "function") {
-        return { type: "function", function: { name: tc.name } };
+        return {type: "function", function: {name: tc.name}};
     }
     return "auto";
 }
@@ -193,7 +193,7 @@ export function buildResponseObject(
     completion: {
         content: string;
         tool_calls?: OpenAI.ToolCall[];
-        usage?: { inputTokens: number; outputTokens: number };
+        usage?: {inputTokens: number; outputTokens: number};
     },
 ): Responses.ResponseObject {
     const output: Responses.ResponseOutputItem[] = [];
