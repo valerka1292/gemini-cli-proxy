@@ -16,6 +16,8 @@ type UsageSummary = {
 };
 
 type Section = "keys" | "models" | "usage";
+type NoticeTone = "info" | "success" | "error";
+type Notice = {title: string; message: string; tone?: NoticeTone};
 
 const tokenKey = "dashboard_token";
 
@@ -62,16 +64,16 @@ function Dialog({
     );
 }
 
-function AlertModal({msg, onClose}: {msg: string | null; onClose: () => void}) {
-    if (!msg) return null;
+function AlertModal({notice, onClose}: {notice: Notice | null; onClose: () => void}) {
+    if (!notice) return null;
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal" onClick={(e) => e.stopPropagation()}>
-                <h3>Notice</h3>
-                <p>{msg}</p>
+            <div className={`modal modal-notice ${notice.tone ? `tone-${notice.tone}` : ""}`} onClick={(e) => e.stopPropagation()}>
+                <h3>{notice.title}</h3>
+                <p>{notice.message}</p>
                 <div className="modal-actions">
-                    <button className="primary" onClick={onClose}>Close</button>
+                    <button className="primary" onClick={onClose}>Got it</button>
                 </div>
             </div>
         </div>
@@ -118,9 +120,10 @@ function App() {
     const [models, setModels] = useState<ModelStatus[]>([]);
     const [usage, setUsage] = useState<UsageSummary | null>(null);
 
-    const [alertMsg, setAlertMsg] = useState<string | null>(null);
+    const [alertNotice, setAlertNotice] = useState<Notice | null>(null);
     const [isKeyModalOpen, setKeyModalOpen] = useState(false);
     const [newKeyName, setNewKeyName] = useState("");
+    const [keyToDelete, setKeyToDelete] = useState<ApiKey | null>(null);
 
     const authHeaders = useMemo(() => ({Authorization: `Bearer ${token}`, "Content-Type": "application/json"}), [token]);
 
@@ -133,9 +136,9 @@ function App() {
     const copyText = async (text: string, successMessage: string) => {
         try {
             await navigator.clipboard.writeText(text);
-            setAlertMsg(successMessage);
+            setAlertNotice({title: "Copied", message: successMessage, tone: "success"});
         } catch {
-            setAlertMsg("Unable to copy automatically. Please copy manually.");
+            setAlertNotice({title: "Copy failed", message: "Unable to copy automatically. Please copy manually.", tone: "error"});
         }
     };
 
@@ -180,7 +183,7 @@ function App() {
         }
 
         if (!res.ok) {
-            setAlertMsg(data.error ?? "Login failed");
+            setAlertNotice({title: "Sign in failed", message: data.error ?? "Login failed", tone: "error"});
             return;
         }
 
@@ -196,7 +199,7 @@ function App() {
         });
         const data = await res.json();
         if (!res.ok) {
-            setAlertMsg(data.error ?? "Register failed");
+            setAlertNotice({title: "Registration failed", message: data.error ?? "Register failed", tone: "error"});
             return;
         }
         setOtpMessage(`OTP: ${data.oneTimeCode}. Press 'c' in proxy console and enter code.`);
@@ -218,16 +221,20 @@ function App() {
         });
         const data = await res.json();
         if (!res.ok) {
-            setAlertMsg(data.error ?? "Unable to create key");
+            setAlertNotice({title: "Key creation failed", message: data.error ?? "Unable to create key", tone: "error"});
             return;
         }
         setCreatedKey(data.key);
         await refreshAuthedData();
     };
 
-    const deleteKey = async (id: string) => {
-        await fetch(`/dashboard/api/keys/${id}`, {method: "DELETE", headers: authHeaders});
+    const confirmDeleteKey = async () => {
+        if (!keyToDelete) return;
+
+        await fetch(`/dashboard/api/keys/${keyToDelete.id}`, {method: "DELETE", headers: authHeaders});
+        setKeyToDelete(null);
         await refreshAuthedData();
+        setAlertNotice({title: "API key revoked", message: `Key "${keyToDelete.name}" was deleted.`, tone: "info"});
     };
 
     const toggleModel = async (id: string, enabled: boolean) => {
@@ -244,18 +251,23 @@ function App() {
             <div className="auth-wrap">
                 <div className="auth-panel">
                     <div className="auth-header"><h1>OpenGemini Dashboard</h1></div>
-                    <label>Email</label>
-                    <input placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                    <label>Password</label>
-                    <input placeholder="••••••••" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                    <label className="field-label">Email</label>
+                    <input className="field-input" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                    <label className="field-label">Password</label>
+                    <input className="field-input" placeholder="••••••••" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
                     <div className="actions">
                         <button className="primary" onClick={login}>Sign in</button>
                         <button className="secondary" onClick={register}>Create account</button>
                     </div>
-                    {otpMessage && <div className="otp">{otpMessage}</div>}
+                    {otpMessage && (
+                        <div className="otp">
+                            <strong>Verify account</strong>
+                            <span>{otpMessage}</span>
+                        </div>
+                    )}
                 </div>
 
-                <AlertModal msg={alertMsg} onClose={() => setAlertMsg(null)} />
+                <AlertModal notice={alertNotice} onClose={() => setAlertNotice(null)} />
             </div>
         );
     }
@@ -333,7 +345,7 @@ function App() {
                                                 <button className="icon-btn" onClick={() => copyText(k.maskedKey, "Masked key copied") } title="Copy masked key">
                                                     <Icon path="M9 9h11v11H9zM4 15V4h11" />
                                                 </button>
-                                                <button className="icon-btn danger" onClick={() => deleteKey(k.id)} title="Revoke key">
+                                                <button className="icon-btn danger" onClick={() => setKeyToDelete(k)} title="Revoke key">
                                                     <Icon path="M3 6h18M8 6V4h8v2m-1 0v14H9V6" />
                                                 </button>
                                             </td>
@@ -414,7 +426,18 @@ function App() {
                 />
             </Dialog>
 
-            <AlertModal msg={alertMsg} onClose={() => setAlertMsg(null)} />
+
+            <Dialog
+                isOpen={Boolean(keyToDelete)}
+                title="Revoke API key"
+                onClose={() => setKeyToDelete(null)}
+                onSubmit={confirmDeleteKey}
+                submitLabel="Revoke key"
+            >
+                <p>Are you sure you want to revoke <code>{keyToDelete?.name}</code>? This action cannot be undone.</p>
+            </Dialog>
+
+            <AlertModal notice={alertNotice} onClose={() => setAlertNotice(null)} />
         </div>
     );
 }
