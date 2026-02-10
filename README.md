@@ -57,15 +57,36 @@ npm install
 npm run dev
 ```
 
-### For Production Use
+### For Production Use (Server + OpenGemini Dashboard)
 
 ```bash
-# Build the project
+# 1) Install root deps
+npm install
+
+# 2) Install dashboard deps
+npm --prefix dashboard install
+
+# 3) Build everything (Vite dashboard + TypeScript server)
 npm run build
 
-# Start production server
-npm start
+# 4) Start production server
+npm start -- --port 3456
 ```
+
+This will produce:
+- Backend build in `dist/`
+- Dashboard SPA build in `dashboard/dist/`
+
+At runtime, the server serves:
+- API: `/openai`, `/anthropic`
+- Dashboard UI: `/dashboard`
+
+### Production Notes
+
+- Dashboard/auth state is persisted in SQLite at:
+  - default: `~/.gemini-cli-proxy/dashboard.sqlite`
+  - override with: `GEMINI_PROXY_DASHBOARD_DB_PATH=/path/to/dashboard.sqlite`
+- For process management in production, use PM2/systemd/Docker and run `npm start` as the service command.
 
 ### Global Installation (Optional)
 
@@ -86,6 +107,7 @@ Once running, the server provides:
 | **OpenAI Compatible** | `http://localhost:3456/openai` |
 | **Anthropic Compatible** | `http://localhost:3456/anthropic` |
 | **Health Check** | `http://localhost:3456/health` |
+| **OpenGemini Dashboard** | `http://localhost:3456/dashboard` |
 
 ---
 
@@ -258,7 +280,9 @@ npm install
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Start development server with hot reload |
-| `npm run build` | Build TypeScript to JavaScript |
+| `npm run build` | Build dashboard (`dashboard/dist`) and backend (`dist`) |
+| `npm run dashboard:build` | Build only the OpenGemini Dashboard (Vite SPA) |
+| `npm run dashboard:dev` | Run dashboard dev server |
 | `npm start` | Start production server |
 | `npm run lint` | Run ESLint |
 | `npm test` | Run tests |
@@ -267,18 +291,23 @@ npm install
 ### Project Structure
 
 ```
+dashboard/             # OpenGemini Dashboard (React + Vite SPA)
+├── src/             # Dashboard UI source
+└── dist/            # Built dashboard assets (generated)
+
 src/
-├── auth/           # Google OAuth authentication
-├── gemini/         # Gemini API client & mappers
+├── auth/            # Google OAuth authentication
+├── dashboard/       # Dashboard backend (auth, keys, usage, SQLite)
+├── gemini/          # Gemini API client & mappers
 │   ├── client.ts           # Core API client
 │   ├── mapper.ts           # Model & schema mapping
 │   ├── openai-mapper.ts    # OpenAI format conversion
 │   └── anthropic-mapper.ts # Anthropic format conversion
-├── routes/         # Express route handlers
+├── routes/          # Express route handlers
 │   ├── openai.ts           # /openai/* endpoints
 │   └── anthropic.ts        # /anthropic/* endpoints
-├── types/          # TypeScript definitions
-└── utils/          # Utility functions & constants
+├── types/           # TypeScript definitions
+└── utils/           # Utility functions & constants
 ```
 
 ---

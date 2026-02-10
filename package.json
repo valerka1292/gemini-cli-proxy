@@ -8,12 +8,14 @@
         "gemini-cli-proxy": "./dist/index.js"
     },
     "scripts": {
-        "build": "tsc",
+        "build": "npm run dashboard:build && tsc",
         "start": "node dist/index.js",
         "dev": "node --loader ts-node/esm src/index.ts",
         "lint": "eslint . --ext .ts",
         "test": "vitest run",
-        "test:cov": "vitest run --coverage"
+        "test:cov": "vitest run --coverage",
+        "dashboard:build": "npm --prefix dashboard run build",
+        "dashboard:dev": "npm --prefix dashboard run dev"
     },
     "engines": {
         "node": ">20.0.0"
@@ -23,6 +25,8 @@
     "license": "Apache-2.0",
     "dependencies": {
         "@commander-js/extra-typings": "^14.0.0",
+        "@types/better-sqlite3": "^7.6.13",
+        "better-sqlite3": "^12.6.2",
         "chalk": "^5.6.0",
         "commander": "^14.0.0",
         "express": "^5.1.0",
