@@ -14,6 +14,8 @@ import {
 } from "./utils/constant.js";
 import {getLogger} from "./utils/logger.js";
 import chalk from "chalk";
+import {createDashboardRouter} from "./dashboard/router.js";
+import {initConsoleVerificationListener} from "./dashboard/security.js";
 
 const program = new Command()
     .option("-p, --port <port>", "Server port", DEFAULT_PORT)
@@ -38,6 +40,7 @@ export async function startServer() {
         );
 
         const app = express();
+        initConsoleVerificationListener(logger);
         
         // Add request logging middleware
         app.use((req, res, next) => {
@@ -71,7 +74,9 @@ export async function startServer() {
             res.type("text/plain").send(
                 "Available endpoints:\n" +
                 `* OpenAI compatible endpoint: http://localhost:${opts.port}/openai\n` +
-                `* Anthropic compatible endpoint: http://localhost:${opts.port}/anthropic`
+                `* Anthropic compatible endpoint: http://localhost:${opts.port}/anthropic
+` +
+                `* Dashboard endpoint: http://localhost:${opts.port}/dashboard`
             );
         });
 
@@ -84,11 +89,15 @@ export async function startServer() {
         const anthropicRouter = createAnthropicRouter(geminiClient);
         app.use("/anthropic", anthropicRouter);
 
+        const dashboardRouter = createDashboardRouter();
+        app.use("/dashboard", dashboardRouter);
+
         // 6. Start server
         const server = app.listen(opts.port, () => {
             logger.info("server started");
             logger.info(`OpenAI compatible endpoint: http://localhost:${opts.port}/openai`);
             logger.info(`Anthropic compatible endpoint: http://localhost:${opts.port}/anthropic`);
+            logger.info(`Dashboard endpoint: http://localhost:${opts.port}/dashboard`);
             logger.info("press Ctrl+C to stop the server");
         });
 

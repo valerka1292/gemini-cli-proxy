@@ -7,6 +7,8 @@ import {getLogger} from "../utils/logger.js";
 import chalk from "chalk";
 import crypto from "crypto";
 import * as fs from "node:fs";
+import {assertModelEnabled, recordUsageFromRequest, requireProxyApiKey} from "../dashboard/security.js";
+import {dashboardStore} from "../dashboard/store.js";
 import {
     cacheThinkingSignature,
     cacheToolSignature,
@@ -18,8 +20,10 @@ export function createAnthropicRouter(geminiClient: GeminiApiClient): express.Ro
     const router = express.Router();
     const logger = getLogger("SERVER-ANTHROPIC", chalk.green);
 
+    router.use(requireProxyApiKey);
+
     router.get("/v1/models", (_req, res) => {
-        const data = Object.values(Gemini.Model).map((modelId) => ({
+        const data = Object.values(Gemini.Model).filter((modelId) => dashboardStore.isModelEnabled(modelId)).map((modelId) => ({
             id: modelId,
             type: "model",
             display_name: modelId,
@@ -42,6 +46,19 @@ export function createAnthropicRouter(geminiClient: GeminiApiClient): express.Ro
             const body = req.body as Anthropic.MessagesRequest;
 
             logger.info(`[TIMING] Request started at ${requestTimestamp} | Model: ${body.model} | Stream: ${body.stream}`);
+
+            const modelAccess = assertModelEnabled(body.model);
+            if (!modelAccess.allowed) {
+                recordUsageFromRequest(req, 403);
+                const forbiddenError: Anthropic.AnthropicError = {
+                    type: "error",
+                    error: {
+                        type: "permission_error",
+                        message: modelAccess.message,
+                    },
+                };
+                return res.status(403).json(forbiddenError);
+            }
 
             // Optional debug logging for request/response payloads.
             // Disabled by default to avoid writing potentially sensitive prompts/tools to disk.
@@ -124,6 +141,7 @@ export function createAnthropicRouter(geminiClient: GeminiApiClient): express.Ro
                                 message: errorMessage
                             }
                         };
+                        recordUsageFromRequest(req, statusCode);
                         res.status(statusCode).json(anthropicError);
                     } else {
                         // Headers already sent - write error as SSE event

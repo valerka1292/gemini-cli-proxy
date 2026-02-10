@@ -8,11 +8,15 @@ import {mapResponsesRequestToChatCompletion, buildResponseObject} from "../gemin
 import {getLogger} from "../utils/logger.js";
 import {cacheToolSignature, cacheThinkingSignature} from "../utils/signature-cache.js";
 import chalk from "chalk";
+import {assertModelEnabled, recordUsageFromRequest, requireProxyApiKey} from "../dashboard/security.js";
+import {dashboardStore} from "../dashboard/store.js";
 
 
 export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Router {
     const router = express.Router();
     const logger = getLogger("SERVER-OPENAI", chalk.green);
+
+    router.use(requireProxyApiKey);
 
     // ─── Responses API ───
 
@@ -21,6 +25,11 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
             const body = req.body as Responses.ResponsesRequest;
             if (!body.input) {
                 return res.status(400).json({error: "input is a required field"});
+            }
+
+            const modelAccess = assertModelEnabled(body.model);
+            if (!modelAccess.allowed) {
+                return res.status(403).json({error: modelAccess.message});
             }
 
             const chatCompletionRequest = mapResponsesRequestToChatCompletion(body);
@@ -302,10 +311,19 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                 try {
                     const completion = await geminiClient.getCompletion(geminiCompletionRequest);
                     const response = buildResponseObject(body.model, completion);
+                    recordUsageFromRequest(req, 200, {
+                        inputTokens: completion.usage?.inputTokens,
+                        outputTokens: completion.usage?.outputTokens,
+                    });
+                    recordUsageFromRequest(req, 200, {
+                        inputTokens: completion.usage?.inputTokens,
+                        outputTokens: completion.usage?.outputTokens,
+                    });
                     res.json(response);
                 } catch (completionError: unknown) {
                     const errorMessage = completionError instanceof Error ? completionError.message : String(completionError);
                     logger.error("responses completion error", completionError);
+                    recordUsageFromRequest(req, 500);
                     res.status(500).json({error: errorMessage});
                 }
             }
@@ -314,6 +332,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
             logger.error("responses error", error);
             if (!res.headersSent) {
+                recordUsageFromRequest(req, 500);
                 res.status(500).json({error: errorMessage});
             } else {
                 res.end();
@@ -324,12 +343,14 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
     // ─── Models ───
 
     router.get("/models", (_req, res) => {
-        const modelData = Object.values(Gemini.Model).map((modelId) => ({
-            id: modelId,
-            object: "model",
-            created: Math.floor(Date.now() / 1000),
-            owned_by: "Google",
-        }));
+        const modelData = Object.values(Gemini.Model)
+            .filter((modelId) => dashboardStore.isModelEnabled(modelId))
+            .map((modelId) => ({
+                id: modelId,
+                object: "model",
+                created: 1770726718,
+                owned_by: "Google",
+            }));
 
         res.json({
             object: "list",
@@ -342,6 +363,10 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
             const body = req.body as OpenAI.ChatCompletionRequest;
             if (!body.messages.length) {
                 return res.status(400).json({error: "messages is a required field"});
+            }
+            const modelAccess = assertModelEnabled(body.model);
+            if (!modelAccess.allowed) {
+                return res.status(403).json({error: modelAccess.message});
             }
             const projectId = await geminiClient.discoverProjectId();
             const geminiCompletionRequest = mapOpenAIChatCompletionRequestToGemini(projectId, body);
@@ -426,6 +451,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
                 } catch (completionError: unknown) {
                     const errorMessage = completionError instanceof Error ? completionError.message : String(completionError);
                     logger.error("completion error", completionError);
+                    recordUsageFromRequest(req, 500);
                     res.status(500).json({error: errorMessage});
                 }
             }
@@ -434,6 +460,7 @@ export function createOpenAIRouter(geminiClient: GeminiApiClient): express.Route
             logger.error("completion error", error);
 
             if (!res.headersSent) {
+                recordUsageFromRequest(req, 500);
                 res.status(500).json({error: errorMessage});
             } else {
                 res.end();
